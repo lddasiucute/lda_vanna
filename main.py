@@ -6,6 +6,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import time
 import uuid
 from datetime import date, timedelta
 from pathlib import Path
@@ -833,7 +834,20 @@ class TrackingRunSqlTool(RunSqlTool):
         self.latest_files = latest_files
 
     async def execute(self, context, args):
+        start = time.perf_counter()
         result = await super().execute(context, args)
+        elapsed = time.perf_counter() - start
+
+        # Ghi thời gian chạy lệnh vào metadata và phần trả về cho mô hình
+        result.metadata["execution_time_seconds"] = round(elapsed, 3)
+        timing_note = f"⏱️ Thời gian chạy lệnh: {elapsed:.3f} giây"
+        result.result_for_llm = f"{result.result_for_llm}\n\n{timing_note}"
+
+        # Hiển thị thời gian trong UI (component văn bản đơn giản), nếu có
+        simple = getattr(result.ui_component, "simple_component", None)
+        if simple is not None and hasattr(simple, "text"):
+            simple.text = f"{simple.text}\n\n{timing_note}"
+
         output_file = result.metadata.get("output_file")
         if result.success and output_file:
             key = (context.user.id, context.conversation_id)
@@ -1247,6 +1261,8 @@ Rules:
    visualize_data with the exact CSV filename returned by run_sql.
 7. Never count unrelated tables in one FROM clause or with CROSS JOIN. Use
    independent scalar subqueries for counts from different tables.
+8. Kết quả run_sql có kèm dòng "⏱️ Thời gian chạy lệnh: X giây". Luôn hiển thị
+   lại thời gian chạy này cho người dùng ở cuối câu trả lời.
 
 Canonical database check:
 SELECT
