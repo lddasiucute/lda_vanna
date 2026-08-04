@@ -1,0 +1,169 @@
+% =====================================================================
+%  BAO CAO KIEM THU HIEU NANG AI (LOAD TEST voi k6)
+%  Bien dich bang: xelatex bao_cao_hieu_nang_ai.tex
+%  (XeLaTeX + fontspec ho tro tieng Viet UTF-8 san, khong can vntex)
+% =====================================================================
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{fontspec}          % can XeLaTeX; font Latin Modern mac dinh ho tro tieng Viet
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{xcolor}
+\usepackage{colortbl}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\definecolor{ok}{RGB}{0,140,60}
+\definecolor{warn}{RGB}{200,140,0}
+\definecolor{bad}{RGB}{200,40,40}
+\definecolor{head}{RGB}{30,60,110}
+
+\newcommand{\ok}[1]{\textcolor{ok}{#1}}
+\newcommand{\warn}[1]{\textcolor{warn}{#1}}
+\newcommand{\bad}[1]{\textcolor{bad}{#1}}
+
+\title{\textbf{Báo cáo Kiểm thử Hiệu năng Hệ thống AI Text-to-SQL}\\[4pt]
+\large Load Test với k6 --- Ứng dụng Vanna (Ollama \texttt{llama3.2} + PostgreSQL Neon)}
+\author{Đức Anh \\ \small \texttt{ducanhtrungvan@gmail.com}}
+\date{Ngày 04 tháng 08 năm 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent Báo cáo trình bày kết quả kiểm thử hiệu năng (load test) của hệ thống hỏi đáp
+dữ liệu bằng ngôn ngữ tự nhiên (Text-to-SQL) xây dựng trên nền Vanna, sử dụng mô hình
+ngôn ngữ lớn Ollama \texttt{llama3.2} chạy cục bộ và cơ sở dữ liệu PostgreSQL (Neon).
+Công cụ \textbf{k6} được dùng để mô phỏng số lượng người dùng đồng thời tăng dần
+(5, 15, 30 và 50 người dùng). Kết quả cho thấy hệ thống hoạt động ổn định dưới
+\textbf{10 người dùng đồng thời}, nhưng \textbf{bão hoà} khi vượt ngưỡng này: thông lượng
+(throughput) không tăng thêm mà độ trễ và tỉ lệ lỗi tăng phi tuyến. Ở mức 50 người dùng,
+độ trễ p95 đạt \textbf{139 giây} và tỉ lệ lỗi lên tới \textbf{13\%}.
+\end{abstract}
+
+\section{Mục tiêu}
+Đánh giá khả năng chịu tải của endpoint hỏi đáp AI khi số lượng người dùng đồng thời
+tăng cao, xác định \emph{điểm bão hoà} và đề xuất hướng cải thiện.
+
+\section{Môi trường và phương pháp}
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}>{\bfseries}l l@{}}
+\toprule
+Hạng mục & Chi tiết \\
+\midrule
+Công cụ kiểm thử & k6 v2.1.0 (Windows/amd64) \\
+Endpoint & \texttt{POST /api/vanna/v2/chat\_sse} (streaming SSE) \\
+Mô hình AI & Ollama \texttt{llama3.2} (chạy cục bộ) \\
+Cơ sở dữ liệu & PostgreSQL --- Neon (\texttt{qlsp\_backup}) \\
+Máy chủ ứng dụng & Uvicorn (1 worker), FastAPI \\
+Loại truy vấn & Câu hỏi tiếng Việt (đếm / tổng hợp) \\
+Tiêu chí thành công & HTTP 200 và stream kết thúc bằng \texttt{[DONE]} \\
+Timeout mỗi request & 180 giây \\
+Baseline (1 người dùng) & $\approx 2{,}5$ giây/truy vấn \\
+\bottomrule
+\end{tabular}
+\caption{Cấu hình môi trường kiểm thử.}
+\end{table}
+
+\noindent\textbf{Lưu ý kỹ thuật:} Mỗi câu hỏi kích hoạt \textbf{2 lần gọi mô hình ngôn ngữ}
+(một lần để sinh câu lệnh SQL, một lần để diễn giải kết quả). Mỗi request dùng một
+\texttt{conversation\_id} riêng biệt nhằm tránh cơ chế khoá theo hội thoại (HTTP 409) của máy chủ.
+
+\section{Kịch bản kiểm thử}
+Hai kịch bản tăng tải (\texttt{ramping-vus}) được thực hiện:
+\begin{itemize}
+  \item \textbf{Kịch bản A --- Tăng dần:} $5 \to 15 \to 30$ người dùng đồng thời trong $\approx 3$ phút 35 giây.
+  \item \textbf{Kịch bản B --- Cao điểm 50:} tăng lên $50$ người dùng và giữ trong 120 giây.
+\end{itemize}
+
+\section{Kết quả tổng hợp}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}l c c c@{}}
+\toprule
+\rowcolor{head!12}
+\textbf{Chỉ số} & \textbf{1 user (baseline)} & \textbf{30 user (A)} & \textbf{50 user (B)} \\
+\midrule
+Tổng số request      & 1     & 177   & 132 \\
+Thông lượng (req/giây) & 0,40 & \textbf{0,75} & \textbf{0,70} \\
+Tỉ lệ thành công     & 100\% & \ok{95,0\%} & \warn{87,0\%} \\
+Số lỗi (rớt kết nối / EOF) & 0 & 9 & 17 \\
+Tỉ lệ lỗi HTTP       & 0\%   & \warn{5,0\%} & \bad{13,0\%} \\
+\bottomrule
+\end{tabular}
+\caption{So sánh kết quả tổng quan theo mức tải.}
+\end{table}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}l c c c@{}}
+\toprule
+\rowcolor{head!12}
+\textbf{Thời gian phản hồi AI} & \textbf{Baseline} & \textbf{30 user} & \textbf{50 user} \\
+\midrule
+Nhanh nhất (min)   & --    & 0,59 s  & 1,34 s \\
+Trung vị (median)  & 2,5 s & 19,43 s & 23,26 s \\
+Trung bình (avg)   & 2,5 s & 20,90 s & \bad{36,28 s} \\
+p90                & --    & 32,71 s & \bad{108,40 s} \\
+p95                & --    & 55,11 s & \bad{139,16 s} \\
+Chậm nhất (max)    & 2,5 s & 89,28 s & \bad{157,20 s} \\
+\bottomrule
+\end{tabular}
+\caption{Phân bố thời gian phản hồi AI theo mức tải (đơn vị: giây).}
+\end{table}
+
+\section{Phân tích}
+
+\subsection{Thông lượng đạt trần}
+Thông lượng gần như không đổi giữa 30 và 50 người dùng ($0{,}75$ so với $0{,}70$ req/giây).
+Điều này cho thấy hệ thống đã \textbf{đạt trần xử lý} ở mức $\approx 0{,}7$--$0{,}75$ request/giây.
+Việc tăng thêm người dùng \emph{không} làm tăng thông lượng mà chỉ kéo dài hàng đợi,
+khiến độ trễ và tỉ lệ lỗi tăng vọt.
+
+\subsection{Nút thắt cổ chai: mô hình ngôn ngữ cục bộ}
+Nguyên nhân chính là \textbf{Ollama chạy cục bộ xử lý gần như tuần tự}. Với 2 lần gọi LLM
+cho mỗi câu hỏi, khi có 30--50 người dùng cùng lúc, các yêu cầu xếp hàng dài: thời gian phản hồi
+tăng từ $2{,}5$ giây (1 người) lên trung vị $\approx 23$ giây và p95 tới $139$ giây (50 người)
+--- tức chậm gấp \textbf{hơn 50 lần}.
+
+\subsection{Lỗi rớt kết nối}
+Các lỗi đều thuộc dạng \texttt{EOF} (máy chủ đóng kết nối khi quá tải). Tỉ lệ lỗi tăng từ
+$5\%$ (30 người) lên $13\%$ (50 người), do kết hợp: hàng đợi Ollama, giới hạn kết nối tới Neon,
+và Uvicorn chỉ chạy \textbf{một worker} duy nhất.
+
+\section{Kết luận}
+\begin{center}
+\fbox{\parbox{0.92\textwidth}{\centering
+\textbf{Điểm bão hoà của hệ thống hiện tại $\approx$ 5--10 người dùng đồng thời.}\\[3pt]
+Dưới 10 người dùng: phản hồi nhanh, gần như không lỗi.
+Từ 15 người dùng: độ trễ tăng phi tuyến, bắt đầu rớt kết nối.
+Ở 30--50 người dùng: p95 đạt 55--139 giây và 5--13\% request thất bại ---
+\textbf{không đạt trải nghiệm chấp nhận được} cho người dùng thực.}}
+\end{center}
+
+\section{Khuyến nghị}
+\begin{longtable}{@{}>{\bfseries}c p{9.5cm} c@{}}
+\toprule
+Ưu tiên & Giải pháp & Kỳ vọng \\
+\midrule
+\endhead
+\bad{Cao} & Chạy Uvicorn nhiều worker (\texttt{-{}-workers 4}) hoặc dùng Gunicorn & Giảm rớt kết nối \\
+\bad{Cao} & Tăng song song Ollama (\texttt{OLLAMA\_NUM\_PARALLEL}) hoặc chuyển sang API cloud (Anthropic/OpenAI) cho tải cao & Gỡ nút thắt LLM \\
+\warn{TB} & Cache câu hỏi và câu lệnh SQL lặp lại & Giảm số lần gọi LLM \\
+\warn{TB} & Cấu hình connection pool tới Neon hợp lý, tăng timeout & Giảm lỗi EOF \\
+\ok{Thấp} & Thêm hàng đợi và thông báo ``đang xử lý'' cho người dùng & Cải thiện trải nghiệm khi tải cao \\
+\bottomrule
+\end{longtable}
+
+\vfill
+\noindent\rule{\textwidth}{0.4pt}\\
+\small Báo cáo được lập dựa trên số liệu thực đo từ k6 (\texttt{k6\_summary.json},
+\texttt{k6\_summary\_50.json}). Kịch bản kiểm thử: \texttt{loadtest/ai\_load\_test.js}.
+
+\end{document}
