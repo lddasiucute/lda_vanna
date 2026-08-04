@@ -280,6 +280,115 @@ def get_index_html(
             const vannaChat = document.querySelector('vanna-chat');
 
             if (vannaChat) {{
+                let responseInProgress = false;
+
+                const syncChatControls = () => {{
+                    const input =
+                        vannaChat.shadowRoot?.querySelector('.message-input');
+                    const sendButton =
+                        vannaChat.shadowRoot?.querySelector('.send-button');
+
+                    // Busy means "cannot send", not "cannot type".
+                    vannaChat.disabled = false;
+                    if (input) {{
+                        input.disabled = false;
+                    }}
+                    if (sendButton) {{
+                        sendButton.disabled =
+                            responseInProgress || !input?.value.trim();
+                        sendButton.title = responseInProgress
+                            ? 'Vui lòng chờ câu trả lời hiện tại hoàn tất'
+                            : '';
+                    }}
+                }};
+
+                const setResponseInProgress = (busy) => {{
+                    responseInProgress = busy;
+                    vannaChat.__responseInProgress = busy;
+                    // The component processes the same chunk after this event.
+                    queueMicrotask(syncChatControls);
+                }};
+
+                const isSendButtonEvent = (event) =>
+                    event.composedPath().some(
+                        (node) => node?.classList?.contains('send-button')
+                    );
+
+                const isMessageInputEvent = (event) =>
+                    event.composedPath().some(
+                        (node) => node?.classList?.contains('message-input')
+                    );
+
+                // Capture these events before the CDN component's own
+                // listeners. Typing remains enabled, but neither the button
+                // nor Enter can start a second request while busy.
+                vannaChat.addEventListener(
+                    'click',
+                    (event) => {{
+                        if (responseInProgress && isSendButtonEvent(event)) {{
+                            event.preventDefault();
+                            event.stopImmediatePropagation();
+                            syncChatControls();
+                        }}
+                    }},
+                    true
+                );
+
+                vannaChat.addEventListener(
+                    'keydown',
+                    (event) => {{
+                        if (
+                            responseInProgress &&
+                            event.key === 'Enter' &&
+                            !event.shiftKey &&
+                            isMessageInputEvent(event)
+                        ) {{
+                            event.preventDefault();
+                            event.stopImmediatePropagation();
+                            syncChatControls();
+                        }}
+                    }},
+                    true
+                );
+
+                // Enter and programmatic actions also pass through sendMessage,
+                // so they cannot bypass the disabled send button.
+                const originalSendMessage =
+                    vannaChat.sendMessage.bind(vannaChat);
+                vannaChat.sendMessage = (...args) => {{
+                    if (responseInProgress) {{
+                        return Promise.resolve(false);
+                    }}
+                    setResponseInProgress(true);
+                    return Promise.resolve(originalSendMessage(...args))
+                        .finally(() => setResponseInProgress(false));
+                }};
+
+                vannaChat.addEventListener('message-sent', () => {{
+                    setResponseInProgress(true);
+                }});
+
+                vannaChat.addEventListener('chunk-received', (event) => {{
+                    const rich = event.detail?.chunk?.rich;
+                    if (
+                        rich?.type === 'chat_input_update' &&
+                        rich?.data?.disabled !== undefined
+                    ) {{
+                        setResponseInProgress(rich.data.disabled);
+                    }}
+                }});
+
+                // Lit re-renders the button whenever the draft changes.
+                vannaChat.shadowRoot?.addEventListener(
+                    'input',
+                    () => {{
+                        // Do not touch the input value: it is the user's draft
+                        // for the next question and must survive this response.
+                        queueMicrotask(syncChatControls);
+                    }},
+                    true
+                );
+
                 // Add artifact event listener to demonstrate external rendering
                 vannaChat.addEventListener('artifact-opened', (event) => {{
                     const {{ artifactId, type, title, trigger }} = event.detail;

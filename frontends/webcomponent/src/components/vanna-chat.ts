@@ -724,6 +724,7 @@ export class VannaChat extends LitElement {
   @state() private status: 'idle' | 'working' | 'error' | 'success' = 'idle';
   @state() private statusMessage = '';
   @state() private statusDetail = '';
+  @state() private sendLocked = false;
   private _windowState: 'normal' | 'maximized' | 'minimized' = 'normal';
 
   @property({ reflect: false })
@@ -857,6 +858,9 @@ export class VannaChat extends LitElement {
   private handleKeyPress(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
+      if (this.sendLocked) {
+        return;
+      }
       this.sendMessage();
     }
   }
@@ -874,8 +878,8 @@ export class VannaChat extends LitElement {
 
     console.log('Will send:', textToSend);
 
-    if (!textToSend.trim() || this.disabled) {
-      console.log('Message empty or disabled, not sending');
+    if (!textToSend.trim() || this.disabled || this.sendLocked) {
+      console.log('Message empty or sending is disabled, not sending');
       return Promise.resolve(false);
     }
 
@@ -1406,7 +1410,7 @@ export class VannaChat extends LitElement {
                 class="send-button"
                 type="button"
                 aria-label="Send message"
-                .disabled=${this.disabled || !this.currentMessage.trim()}
+                .disabled=${this.disabled || this.sendLocked || !this.currentMessage.trim()}
                 @click=${this.sendMessage}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">

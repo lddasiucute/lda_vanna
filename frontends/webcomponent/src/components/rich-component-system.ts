@@ -2083,7 +2083,14 @@ export class ComponentManager {
       chatInput.placeholder = placeholder;
     }
     if (disabled !== undefined) {
-      chatInput.disabled = disabled;
+      if (vannaChat) {
+        // Keep the editor usable while a response is being generated. Only
+        // sending is locked; the user may prepare the next question.
+        (vannaChat as any).sendLocked = disabled;
+        chatInput.disabled = Boolean(vannaChat.disabled);
+      } else {
+        chatInput.disabled = disabled;
+      }
     }
     if (value !== undefined) {
       chatInput.value = value;

@@ -1,6 +1,8 @@
 build
 **.egg-info
 venn
+venv/
+.venv/
 .DS_Store
 tests/__pycache__
 __pycache__/
@@ -19,6 +21,18 @@ chroma.sqlite3
 .coverage.*
 milvus.db
 .milvus.db.lock
+
+# Local secrets and data (do NOT commit)
+.env
+.env.local
+*.db
+*.sqlite3
+neon_sales_demo.sql
+neon_backup_import/
+query_results/
+3477cdab157537bd/
+3ef8b33c36a1d49b/
+dfb08c97e02fecde/
 
 # Frontend builds and dependencies
 frontends/**/node_modules/

@@ -2,6 +2,7 @@
 FastAPI route implementations for Vanna Agents.
 """
 
+import asyncio
 import json
 import traceback
 from typing import Any, AsyncGenerator, Dict, Optional
@@ -25,6 +26,18 @@ def register_chat_routes(
         config: Server configuration
     """
     config = config or {}
+    conversation_locks: Dict[str, asyncio.Lock] = {}
+    duplicate_request_grace_seconds = 0.35
+
+    async def release_conversation_lock(
+        lock_key: str, lock: asyncio.Lock
+    ) -> None:
+        """Reject requests queued while a blocking local LLM call was running."""
+        await asyncio.sleep(duplicate_request_grace_seconds)
+        if lock.locked():
+            lock.release()
+        if conversation_locks.get(lock_key) is lock:
+            conversation_locks.pop(lock_key, None)
 
     @app.get("/", response_class=HTMLResponse)
     async def index() -> str:
@@ -50,6 +63,18 @@ def register_chat_routes(
             query_params=dict(http_request.query_params),
             metadata=chat_request.metadata,
         )
+        lock_key = (
+            chat_request.conversation_id
+            or chat_request.request_id
+            or (http_request.client.host if http_request.client else "anonymous")
+        )
+        lock = conversation_locks.setdefault(lock_key, asyncio.Lock())
+        if lock.locked():
+            raise HTTPException(
+                status_code=409,
+                detail="A response is already being generated for this conversation.",
+            )
+        await lock.acquire()
 
         async def generate() -> AsyncGenerator[str, None]:
             """Generate SSE stream."""
@@ -68,6 +93,10 @@ def register_chat_routes(
                     "request_id": chat_request.request_id or "",
                 }
                 yield f"data: {json.dumps(error_data)}\n\n"
+            finally:
+                asyncio.create_task(
+                    release_conversation_lock(lock_key, lock)
+                )
 
         return StreamingResponse(
             generate(),
@@ -173,6 +202,18 @@ def register_chat_routes(
             query_params=dict(http_request.query_params),
             metadata=chat_request.metadata,
         )
+        lock_key = (
+            chat_request.conversation_id
+            or chat_request.request_id
+            or (http_request.client.host if http_request.client else "anonymous")
+        )
+        lock = conversation_locks.setdefault(lock_key, asyncio.Lock())
+        if lock.locked():
+            raise HTTPException(
+                status_code=409,
+                detail="A response is already being generated for this conversation.",
+            )
+        await lock.acquire()
 
         try:
             result = await chat_handler.handle_poll(chat_request)
@@ -181,3 +222,7 @@ def register_chat_routes(
             traceback.print_stack()
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"Chat failed: {str(e)}")
+        finally:
+            asyncio.create_task(
+                release_conversation_lock(lock_key, lock)
+            )

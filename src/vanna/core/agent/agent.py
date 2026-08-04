@@ -405,6 +405,13 @@ class Agent:
                 detail="Analyzing query",
             )
         )
+        yield UiComponent(  # type: ignore
+            rich_component=ChatInputUpdateComponent(
+                placeholder="Đang xử lý, vui lòng chờ...",
+                disabled=True,
+                focus=False,
+            )
+        )
 
         # Load or create conversation with observability (but don't add message yet)
         conversation_span = None
@@ -1011,22 +1018,6 @@ class Agent:
                     conversation, tool_schemas, user, system_prompt
                 )
             else:
-                # Update status to idle and set completion message
-                yield UiComponent(  # type: ignore
-                    rich_component=StatusBarUpdateComponent(
-                        status="idle",
-                        message="Response complete",
-                        detail="Ready for next message",
-                    )
-                )
-
-                # Update chat input placeholder
-                yield UiComponent(  # type: ignore
-                    rich_component=ChatInputUpdateComponent(
-                        placeholder="Ask a follow-up question...", disabled=False
-                    )
-                )
-
                 # Yield final text response
                 if response.content:
                     # Add assistant response to conversation
@@ -1039,6 +1030,21 @@ class Agent:
                         ),
                         simple_component=SimpleTextComponent(text=response.content),
                     )
+
+                # Unlock sending only after the complete answer has been
+                # delivered. The text box itself remains editable in the UI.
+                yield UiComponent(  # type: ignore
+                    rich_component=StatusBarUpdateComponent(
+                        status="idle",
+                        message="Response complete",
+                        detail="Ready for next message",
+                    )
+                )
+                yield UiComponent(  # type: ignore
+                    rich_component=ChatInputUpdateComponent(
+                        placeholder="Ask a follow-up question...", disabled=False
+                    )
+                )
                 break
 
         # Check if we hit the tool iteration limit
