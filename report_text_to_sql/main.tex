@@ -1,0 +1,860 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{fontspec}
+\IfFontExistsTF{Latin Modern Roman}
+  {\setmainfont{Latin Modern Roman}}
+  {\setmainfont{Times New Roman}}
+\IfFontExistsTF{Latin Modern Sans}
+  {\setsansfont{Latin Modern Sans}}
+  {\setsansfont{Arial}}
+\IfFontExistsTF{Latin Modern Mono}
+  {\setmonofont{Latin Modern Mono}}
+  {\setmonofont{Consolas}}
+\usepackage{amsmath}
+\usepackage{polyglossia}
+\setdefaultlanguage{vietnamese}
+\usepackage{geometry}
+\geometry{top=2.25cm,bottom=2.2cm,left=2.35cm,right=2.15cm}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{array,booktabs,longtable,tabularx,multirow}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{setspace}
+\usepackage{microtype}
+
+\definecolor{vnptblue}{HTML}{006FD6}
+\definecolor{deepblue}{HTML}{004E92}
+\definecolor{lightblue}{HTML}{EEF6FF}
+\definecolor{lightgray}{HTML}{F4F5F7}
+\definecolor{darkgray}{HTML}{2B2B2B}
+\definecolor{successgreen}{HTML}{15803D}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=vnptblue,
+  urlcolor=deepblue,
+  citecolor=deepblue,
+  pdfauthor={Lê Đức Anh},
+  pdftitle={Báo cáo nghiên cứu Text-to-SQL và Vanna},
+  pdfsubject={Định nghĩa, phương pháp luận và phương án triển khai}
+}
+
+\setlength{\parindent}{0.7cm}
+\setlength{\parskip}{3pt}
+\setlength{\headheight}{15pt}
+\setlist[itemize]{leftmargin=1.1cm,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=1.1cm,itemsep=3pt,topsep=3pt}
+\renewcommand{\arraystretch}{1.2}
+
+\titleformat{\section}
+  {\Large\bfseries\color{vnptblue}}
+  {\thesection.}{0.55em}{}
+\titleformat{\subsection}
+  {\large\bfseries\color{darkgray}}
+  {\thesubsection.}{0.5em}{}
+\titleformat{\subsubsection}
+  {\normalsize\bfseries}
+  {\thesubsubsection.}{0.5em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\bfseries VNPT IT - TRUNG TÂM DMS}
+\fancyhead[R]{\small\itshape Báo cáo Nghiên cứu Giải pháp AI}
+\fancyfoot[L]{\small Người thực hiện: Lê Đức Anh}
+\fancyfoot[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+
+\newcommand{\methodbox}[2]{%
+  \begin{center}
+  \fcolorbox{vnptblue}{lightblue}{%
+    \begin{minipage}{0.92\textwidth}
+      \vspace{0.18cm}
+      {\bfseries\color{deepblue}#1}\par
+      \vspace{0.08cm}
+      #2
+      \vspace{0.18cm}
+    \end{minipage}
+  }
+  \end{center}
+}
+
+\lstdefinelanguage{SQL}{
+  keywords={SELECT,FROM,WHERE,GROUP,BY,ORDER,JOIN,ON,AS,AND,OR,LIMIT,
+  WITH,COUNT,SUM,AVG,DISTINCT,CASE,WHEN,THEN,ELSE,END},
+  sensitive=false,
+  morecomment=[l]{--},
+  morestring=[b]'
+}
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{lightgray},
+  frame=single,
+  rulecolor=\color{gray},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible
+}
+
+\begin{document}
+
+\begin{titlepage}
+\thispagestyle{empty}
+
+\begin{minipage}[t]{0.24\textwidth}
+  \vspace{0pt}
+  \IfFileExists{vnpt_logo.png}{
+    \includegraphics[width=3.25cm]{vnpt_logo.png}
+  }{
+    \fcolorbox{vnptblue}{white}{
+      \parbox[c][1.5cm][c]{3.0cm}{
+        \centering\color{vnptblue}\Large\bfseries VNPT
+      }
+    }
+  }
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.70\textwidth}
+  \vspace{0.8cm}
+  \begin{center}
+  {\bfseries TẬP ĐOÀN BƯU CHÍNH VIỄN THÔNG VIỆT NAM}\\[2pt]
+  {\bfseries VNPT IT - TRUNG TÂM DMS}\\[3pt]
+  {\itshape Bộ phận Phát triển Giải pháp AI}
+  \end{center}
+\end{minipage}
+
+\vspace{0.55cm}
+
+\begin{center}
+{\LARGE\bfseries BÁO CÁO NGHIÊN CỨU VÀ PHƯƠNG ÁN TRIỂN KHAI}\\[0.25cm]
+{\LARGE\bfseries HỆ THỐNG TEXT-TO-SQL DỰA TRÊN}\\[0.12cm]
+{\LARGE\bfseries KỸ THUẬT GOOGLE CLOUD VÀ NỀN TẢNG VANNA}\\[0.30cm]
+
+{\large\bfseries Định nghĩa, Phương pháp luận, Kiến trúc tham chiếu}\\
+{\large\bfseries và Kế hoạch Khảo nghiệm Hệ thống Hỏi đáp Dữ liệu}\\[0.42cm]
+
+\rule{0.47\textwidth}{1.5pt}
+\end{center}
+
+\vspace{0.42cm}
+
+\begin{center}
+\setlength{\fboxsep}{0pt}
+\fcolorbox{vnptblue}{white}{%
+\begin{minipage}{0.94\textwidth}
+\colorbox{vnptblue}{\parbox{\linewidth}{%
+  \centering\color{white}\bfseries\large
+  PHẠM VI NGHIÊN CỨU VÀ KHẢO NGHIỆM}}
+\vspace{0.15cm}
+\begin{minipage}{0.92\linewidth}
+\hspace{0.45cm}
+\small
+Báo cáo tổng hợp hai nguồn kỹ thuật chính: bài viết
+\textit{Getting AI to write good SQL: Text-to-SQL techniques explained}
+của Google Cloud và mã nguồn mở Vanna. Mục tiêu là xây dựng phương pháp
+chuyển câu hỏi nghiệp vụ thành SQL có kiểm soát, có thể giải thích, kiểm thử
+và triển khai trên hạ tầng nội bộ.
+\end{minipage}
+\vspace{0.15cm}
+\end{minipage}}
+\end{center}
+
+\vspace{0.18cm}
+
+\begin{center}
+\setlength{\fboxsep}{0pt}
+\fcolorbox{darkgray}{white}{
+\begin{minipage}{0.94\textwidth}
+\colorbox{darkgray}{\parbox{\linewidth}{%
+  \centering\color{white}\bfseries Tóm tắt thông số nghiên cứu}}
+\vspace{0.10cm}
+\small
+\begin{tabularx}{0.93\textwidth}{>{\bfseries}p{4.0cm}X}
+Phương pháp luận: & Context engineering, truy hồi ngữ nghĩa, làm rõ ý định,
+kiểm chứng SQL và tự hiệu chỉnh\\
+Nền tảng tham chiếu: & Vanna 2.0, FastAPI, Ollama, PostgreSQL trên Neon,
+công cụ thực thi SQL và giao diện hội thoại\\
+Đầu ra hệ thống: & SQL, bảng dữ liệu, biểu đồ và tóm tắt ngôn ngữ tự nhiên\\
+Nguyên tắc an toàn: & Chỉ đọc, phân quyền theo người dùng, kiểm tra cú pháp,
+giới hạn tài nguyên và nhật ký kiểm toán\\
+\end{tabularx}
+\vspace{0.10cm}
+\end{minipage}}
+\end{center}
+
+\vfill
+
+\begin{flushright}\small
+\textbf{Người thực hiện:}\\
+\textit{Lê Đức Anh}\\
+Trung tâm DMS
+\end{flushright}
+
+\end{titlepage}
+
+\setcounter{page}{1}
+\setcounter{tocdepth}{1}
+\tableofcontents
+\clearpage
+
+\section{Tóm tắt kết quả cho Lãnh đạo (Executive Summary)}
+
+\textbf{Text-to-SQL} là năng lực chuyển câu hỏi ngôn ngữ tự nhiên của người
+dùng thành câu lệnh SQL để truy vấn dữ liệu. Giá trị chính của công nghệ là
+rút ngắn thời gian từ câu hỏi nghiệp vụ đến thông tin ra quyết định, đồng
+thời giảm phụ thuộc vào nhóm chuyên gia SQL. Tuy nhiên, một mô hình ngôn ngữ
+đơn lẻ không tự biết cấu trúc dữ liệu, định nghĩa nghiệp vụ và quy tắc phân
+quyền của từng đơn vị. Vì vậy, chất lượng hệ thống phụ thuộc chủ yếu vào
+\textbf{ngữ cảnh được truy hồi}, \textbf{khả năng làm rõ ý định} và
+\textbf{cơ chế kiểm chứng SQL}, không chỉ phụ thuộc vào kích thước LLM
+\cite{google2025,vannapaper2023}.
+
+Bài viết của Google Cloud phân loại ba nhóm khó khăn cốt lõi: cung cấp ngữ
+cảnh đặc thù doanh nghiệp; hiểu đúng ý định của người dùng; và khắc phục giới
+hạn sinh mã của LLM, đặc biệt là khác biệt phương ngữ SQL. Các kỹ thuật đề
+xuất gồm truy hồi và xếp hạng bảng/cột, học trong ngữ cảnh bằng ví dụ, liên
+kết dữ liệu, lớp ngữ nghĩa, phân giải thực thể, câu hỏi làm rõ, dry-run,
+viết lại truy vấn và self-consistency \cite{google2025}.
+
+Vanna là nền tảng Python mã nguồn mở cho chuỗi xử lý
+\textit{câu hỏi tự nhiên $\rightarrow$ SQL $\rightarrow$ kết quả}. Ở Vanna
+2.0, hệ thống được tổ chức theo kiến trúc agent và công cụ, có giao diện web
+streaming, bảng và biểu đồ, nhận diện người dùng, kiểm soát quyền và tích hợp
+nhiều LLM/cơ sở dữ liệu \cite{vanna2026}. Vanna cung cấp khung triển khai,
+trong khi phương pháp của Google Cloud cung cấp các nguyên tắc nâng độ chính
+xác. Hai nguồn bổ sung cho nhau.
+
+Khảo nghiệm trong báo cáo đã được hiện thực bằng FastAPI, Vanna 2.0, Ollama
+với model \texttt{llama3.2} và PostgreSQL được quản lý trên Neon. Cơ sở dữ liệu
+mẫu gồm 10 bảng quan hệ, 10.000 đơn hàng, 20.000 dòng sản phẩm và view ngữ
+nghĩa \texttt{sales\_enriched}. Kết nối ứng dụng sử dụng
+\texttt{PostgresRunner} và biến môi trường \texttt{DATABASE\_URL}; kết quả
+kiểm thử xác nhận agent truy vấn trực tiếp dữ liệu trên Neon thay cho SQLite.
+
+\methodbox{Đề xuất cốt lõi}{%
+Triển khai theo kiến trúc hai vòng bảo vệ: (1) xây dựng ngữ cảnh đúng bằng
+metadata, tài liệu nghiệp vụ và ví dụ SQL đã xác nhận; (2) kiểm chứng truy
+vấn bằng parser, chính sách chỉ đọc, dry-run/thực thi giới hạn và vòng sửa
+lỗi. Với câu hỏi mơ hồ, hệ thống phải hỏi lại thay vì tự suy đoán.}
+
+\begin{table}[H]
+\centering
+\caption{Kết luận định hướng từ hai nguồn nghiên cứu}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{3.2cm}X X}
+\toprule
+Khía cạnh & Google Cloud & Vanna\\
+\midrule
+Trọng tâm & Kỹ thuật nâng độ chính xác text-to-SQL &
+Khung ứng dụng và vận hành agent dữ liệu\\
+Ngữ cảnh & Truy hồi bảng/cột, ví dụ, lớp ngữ nghĩa, lịch sử &
+DDL, tài liệu, cặp câu hỏi-SQL, bộ nhớ và system prompt\\
+Kiểm chứng & Parser, dry-run, reprompting, self-consistency &
+Công cụ SQL, middleware, lifecycle hook, audit và UI có cấu trúc\\
+Đầu ra & Truy vấn đúng ngữ nghĩa và đúng phương ngữ &
+SQL, bảng, biểu đồ, tóm tắt streaming\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Cơ sở lý thuyết và các định nghĩa}
+
+\subsection{Định nghĩa Text-to-SQL}
+
+Text-to-SQL là bài toán ánh xạ một phát biểu ngôn ngữ tự nhiên
+$q$ và ngữ cảnh dữ liệu $C$ thành câu lệnh SQL $s$:
+\[
+ f_{\theta}(q,C,d,p) \longrightarrow s
+\]
+trong đó $d$ là phương ngữ SQL (SQLite, PostgreSQL, BigQuery, MySQL,\ldots),
+$p$ là chính sách truy cập, và $\theta$ biểu diễn mô hình sinh. Một hệ thống
+hoàn chỉnh không dừng ở việc sinh chuỗi SQL; nó phải xác nhận SQL chạy được,
+tuân thủ quyền, trả đúng tập kết quả và diễn giải kết quả một cách trung
+thực.
+
+\subsection{Ngữ cảnh nghiệp vụ (Business-specific Context)}
+
+Ngữ cảnh là toàn bộ thông tin ngoài câu hỏi giúp mô hình hiểu đúng dữ liệu:
+
+\begin{itemize}
+  \item \textbf{Ngữ cảnh cấu trúc:} schema, DDL, khóa chính/khóa ngoại, kiểu dữ
+  liệu, quan hệ giữa bảng và phương ngữ SQL.
+  \item \textbf{Ngữ cảnh ngữ nghĩa:} ý nghĩa cột, định nghĩa KPI, quy tắc lọc,
+  cách hiểu các mã nội bộ và quy ước thời gian.
+  \item \textbf{Ngữ cảnh bằng ví dụ:} cặp câu hỏi-SQL đã được chuyên gia xác
+  nhận, truy vấn phổ biến và mẫu join chuẩn.
+  \item \textbf{Ngữ cảnh dữ liệu:} giá trị mẫu, phân bố, từ đồng nghĩa và ánh
+  xạ thực thể từ ngôn ngữ người dùng sang giá trị trong cơ sở dữ liệu.
+\end{itemize}
+
+Google Cloud nhấn mạnh rằng fine-tuning cho từng schema thường không mở rộng
+tốt vì schema và dữ liệu thay đổi liên tục; thay vào đó, nên truy hồi ngữ
+cảnh cần thiết tại thời điểm hỏi \cite{google2025}.
+
+\subsection{RAG và truy hồi có định hướng SQL}
+
+\textbf{Retrieval-Augmented Generation (RAG)} là cách truy hồi một tập ngữ
+cảnh liên quan trước khi gọi LLM. Với text-to-SQL, kho truy hồi thường chứa:
+
+\begin{enumerate}
+  \item DDL và mô tả bảng/cột;
+  \item tài liệu định nghĩa nghiệp vụ;
+  \item cặp câu hỏi-SQL đúng;
+  \item lịch sử truy vấn và phản hồi của người dùng.
+\end{enumerate}
+
+Vanna 1.x gọi quá trình nạp các thành phần trên là ``training'', nhưng đây
+không nhất thiết là huấn luyện lại trọng số LLM. Về bản chất, hệ thống lưu
+metadata/embedding vào lớp truy hồi và đưa các mục liên quan vào prompt khi
+có câu hỏi mới \cite{vannalegacy,vannapaper2023}.
+
+\subsection{Lớp ngữ nghĩa (Semantic Layer)}
+
+Lớp ngữ nghĩa là cầu nối giữa cấu trúc dữ liệu kỹ thuật và ngôn ngữ nghiệp
+vụ. Ví dụ, ``doanh thu thuần'' có thể được chuẩn hóa thành:
+\[
+ \text{Net Revenue} =
+ \sum(\text{quantity}\times\text{unit price}\times(1-\text{discount}))
+\]
+với điều kiện loại đơn hủy/hoàn. Khi định nghĩa này được quản trị tập trung,
+mọi câu hỏi tương đương đều dùng cùng một công thức, giảm sai khác giữa các
+lần sinh SQL.
+
+\subsection{Agentic Text-to-SQL}
+
+Agentic text-to-SQL mở rộng RAG bằng vòng lặp ra quyết định và sử dụng công
+cụ. Agent có thể truy hồi metadata, hỏi lại người dùng, sinh SQL, kiểm tra,
+thực thi, nhận lỗi, sửa truy vấn, tạo biểu đồ và tóm tắt. Vanna 2.0 hiện thực
+hóa mô hình này qua \texttt{Agent}, \texttt{ToolRegistry},
+\texttt{RunSqlTool}, bộ phân giải người dùng và các thành phần UI streaming
+\cite{vanna2026}.
+
+\section{Những thách thức cốt lõi của Text-to-SQL}
+
+\subsection{Thiếu ngữ cảnh đặc thù doanh nghiệp}
+
+LLM không thể suy ra rằng một mã nội bộ, một view tổng hợp hoặc một điều kiện
+lọc cụ thể đại diện cho khái niệm nghiệp vụ nào. Nếu chỉ cung cấp tên bảng
+và cột, truy vấn có thể chạy nhưng trả lời sai ý nghĩa. Nghiên cứu trong repo
+Vanna báo cáo độ chính xác trong thí nghiệm cũ tăng từ khoảng 3\% khi chỉ
+dùng schema lên khoảng 80\% khi truy hồi ngữ cảnh liên quan gồm schema, tài
+liệu và ví dụ SQL; đây là kết quả lịch sử trên bộ thử nghiệm cụ thể, không
+nên hiểu là cam kết hiệu năng cho mọi hệ thống \cite{vannapaper2023}.
+
+\subsection{Ý định người dùng mơ hồ}
+
+Câu hỏi ``sản phẩm bán chạy nhất'' có thể có nhiều cách hiểu: số lượng bán,
+số đơn hàng, doanh thu hay lợi nhuận; có tính đơn hoàn hay không; lấy một hay
+nhiều sản phẩm. Một hệ thống đáng tin cậy phải:
+
+\begin{itemize}
+  \item phát hiện thuật ngữ chưa được định nghĩa;
+  \item đối chiếu với semantic layer và hồ sơ người dùng;
+  \item hỏi một câu làm rõ ngắn gọn khi có nhiều diễn giải hợp lý;
+  \item lưu lựa chọn đã xác nhận làm ngữ cảnh cho các câu hỏi sau.
+\end{itemize}
+
+\subsection{Giới hạn sinh mã và khác biệt phương ngữ}
+
+Các hệ quản trị dùng hàm và cú pháp khác nhau. Ví dụ, cách lấy tháng từ
+timestamp trong BigQuery khác MySQL. Ngoài lỗi cú pháp, LLM còn có thể bịa
+tên bảng/cột, join sai khóa, nhân bản bản ghi khi tổng hợp, hoặc bỏ điều kiện
+phân quyền. Do đó, prompt cần nêu rõ dialect, còn pipeline phải có cơ chế
+kiểm chứng không phụ thuộc LLM \cite{google2025}.
+
+\subsection{Rủi ro an toàn và quản trị}
+
+Một truy vấn đúng cú pháp vẫn có thể gây rủi ro nếu đọc dữ liệu ngoài phạm
+vi người dùng, quét toàn bảng, làm lộ thông tin cá nhân hoặc thực hiện DDL/DML.
+Các kiểm soát tối thiểu gồm:
+
+\begin{itemize}
+  \item tài khoản cơ sở dữ liệu chỉ đọc và nguyên tắc quyền tối thiểu;
+  \item allowlist schema/view, chặn nhiều câu lệnh và từ khóa ghi/xóa;
+  \item row-level security hoặc bộ lọc theo nhóm người dùng;
+  \item timeout, giới hạn số hàng, chi phí quét và tốc độ yêu cầu;
+  \item audit log cho câu hỏi, SQL, người dùng, thời gian và kết quả kiểm tra.
+\end{itemize}
+
+\section{Phương pháp luận nâng cao độ chính xác}
+
+\subsection{Giai đoạn 1: Chuẩn hóa và lập chỉ mục ngữ cảnh}
+
+\begin{enumerate}
+  \item \textbf{Thu thập metadata:} DDL, khóa, view, comment, data dictionary,
+  chủ sở hữu dữ liệu và dialect.
+  \item \textbf{Chuẩn hóa ngữ nghĩa:} KPI, thuật ngữ viết tắt, điều kiện lọc,
+  quy tắc thời gian và đơn vị đo.
+  \item \textbf{Xây kho ví dụ chuẩn:} câu hỏi-SQL do chuyên gia dữ liệu xác
+  nhận; loại bỏ truy vấn lỗi thời hoặc có quyền truy cập không phù hợp.
+  \item \textbf{Tạo chỉ mục truy hồi:} embedding cho câu hỏi, mô tả bảng/cột
+  và tài liệu; lưu metadata để lọc theo miền dữ liệu và quyền.
+  \item \textbf{Quản lý phiên bản:} liên kết mỗi mục ngữ cảnh với phiên bản
+  schema và ngày xác nhận.
+\end{enumerate}
+
+\subsection{Giai đoạn 2: Truy hồi và xếp hạng đa tầng}
+
+Không nên đưa toàn bộ data warehouse vào prompt. Quy trình đề xuất:
+
+\begin{enumerate}
+  \item xác định miền dữ liệu bằng phân loại ý định;
+  \item truy hồi dataset/table/cột theo tương đồng ngữ nghĩa;
+  \item bổ sung quan hệ khóa và các bảng cầu nối cần thiết;
+  \item truy hồi ví dụ câu hỏi-SQL tương tự và quy tắc nghiệp vụ;
+  \item xếp hạng lại dựa trên độ liên quan, độ mới, quyền và mức tin cậy;
+  \item đóng gói tập ngữ cảnh nhỏ, có cấu trúc vào prompt.
+\end{enumerate}
+
+\methodbox{Nguyên tắc ``đủ nhưng không thừa''}{%
+Ngữ cảnh quá ít làm mô hình bịa schema; ngữ cảnh quá nhiều làm tăng độ trễ,
+chi phí và nhiễu. Mục tiêu là truy hồi tập bảng/cột/ví dụ nhỏ nhất vẫn đủ để
+giải quyết câu hỏi.}
+
+\subsection{Giai đoạn 3: Làm rõ ý định và phân giải thực thể}
+
+Trước khi sinh SQL, agent đánh giá khả năng trả lời:
+
+\begin{itemize}
+  \item Nếu câu hỏi rõ và schema đủ: tiếp tục sinh SQL.
+  \item Nếu thiếu định nghĩa: hỏi lựa chọn cụ thể, ví dụ ``bán chạy theo số
+  lượng hay doanh thu?''.
+  \item Nếu thực thể không khớp: tìm giá trị gần đúng hoặc đề nghị người dùng
+  xác nhận.
+  \item Nếu vượt quyền hoặc ngoài miền dữ liệu: từ chối có giải thích.
+\end{itemize}
+
+\subsection{Giai đoạn 4: Sinh SQL có ràng buộc}
+
+Prompt sinh SQL nên chứa: vai trò hệ thống; dialect; schema được truy hồi;
+định nghĩa nghiệp vụ; ví dụ tương tự; chính sách an toàn; yêu cầu định dạng
+đầu ra. Có thể yêu cầu mô hình tạo một cấu trúc gồm SQL, bảng/cột sử dụng và
+giả định, nhưng chỉ SQL đã được kiểm chứng mới được thực thi.
+
+\subsection{Giai đoạn 5: Kiểm chứng, dry-run và tự sửa}
+
+\begin{table}[H]
+\centering
+\caption{Chuỗi kiểm chứng đề xuất trước khi trả kết quả}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{2.7cm}X p{3.3cm}}
+\toprule
+Lớp kiểm tra & Nội dung & Tín hiệu thất bại\\
+\midrule
+Chính sách & Chỉ SELECT, schema cho phép, quyền theo người dùng &
+Vi phạm quyền/từ khóa cấm\\
+Cú pháp & Parse AST, một câu lệnh, đúng dialect &
+Parser báo lỗi\\
+Ngữ nghĩa tĩnh & Bảng/cột tồn tại, join có khóa, KPI đúng định nghĩa &
+Định danh không tồn tại\\
+Chi phí & EXPLAIN/dry-run, giới hạn scan, timeout và số hàng &
+Chi phí vượt ngưỡng\\
+Thực thi giới hạn & Chạy read-only với LIMIT và timeout &
+Lỗi DB hoặc kết quả bất thường\\
+Tự sửa & Đưa lỗi có cấu trúc lại cho LLM, giới hạn số vòng &
+Vượt số lần sửa\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Google Cloud nhận định parser và dry-run cung cấp tín hiệu xác định để bổ
+sung cho quy trình dựa trên mô hình; lỗi này có thể được đưa lại vào prompt
+để mô hình sửa ở vòng tiếp theo \cite{google2025}.
+
+\subsection{Self-consistency và lựa chọn ứng viên}
+
+Với câu hỏi quan trọng, hệ thống có thể sinh nhiều ứng viên bằng prompt hoặc
+mô hình khác nhau. Mỗi ứng viên được chấm theo: hợp lệ cú pháp, tương thích
+schema, tuân thủ chính sách, kết quả dry-run, độ tương đồng giữa kết quả và
+mức đồng thuận. Cách này tăng độ tin cậy nhưng làm tăng độ trễ và chi phí,
+do đó chỉ nên bật theo mức rủi ro.
+
+\section{Kiến trúc Vanna và ánh xạ với phương pháp Google Cloud}
+
+\subsection{Các thành phần chính của Vanna 2.0}
+
+Theo README của repo, Vanna 2.0 cung cấp giao diện \texttt{<vanna-chat>},
+FastAPI/Flask backend, agent, tool, bảng và biểu đồ streaming, nhận diện người
+dùng, row-level security, audit log và lifecycle hook. Hệ thống hỗ trợ nhiều
+LLM và nhiều loại cơ sở dữ liệu \cite{vanna2026}.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.45}
+\begin{tabular}{c@{\quad$\longrightarrow$\quad}c@{\quad$\longrightarrow$\quad}c}
+\fcolorbox{vnptblue}{lightblue}{\parbox{2.5cm}{\centering\bfseries Người dùng\\Câu hỏi}}&
+\fcolorbox{vnptblue}{lightblue}{\parbox{2.8cm}{\centering\bfseries Vanna Agent\\Ngữ cảnh + LLM}}&
+\fcolorbox{vnptblue}{lightblue}{\parbox{2.7cm}{\centering\bfseries Công cụ\\SQL/biểu đồ}}\\
+\multicolumn{3}{c}{\vspace{0.15cm}}\\[-6pt]
+\multicolumn{3}{c}{$\downarrow$}\\[-2pt]
+\multicolumn{3}{c}{%
+\fcolorbox{darkgray}{lightgray}{\parbox{9.2cm}{\centering
+\bfseries Cơ sở dữ liệu + phân quyền + nhật ký kiểm toán}}}
+\end{tabular}
+\end{center}
+
+\subsection{Vanna 1.x và Vanna 2.0}
+
+\begin{table}[H]
+\centering
+\caption{Phân biệt hai cách tiếp cận trong hệ sinh thái Vanna}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{3.0cm}X X}
+\toprule
+Tiêu chí & Vanna 1.x / Legacy & Vanna 2.0\\
+\midrule
+Mô hình chính & RAG cho sinh SQL & Agent dùng công cụ và UI streaming\\
+Ngữ cảnh & DDL, tài liệu, câu hỏi-SQL trong vector store &
+System prompt, memory, tool schema, middleware\\
+Luồng xử lý & Train metadata, ask, sinh SQL, chạy và hiển thị &
+Nhận diện user, agent loop, tool call, component streaming\\
+Bảo mật & Chủ yếu do ứng dụng tích hợp &
+User-aware tools, group permission, hooks và audit\\
+Phù hợp & PoC RAG, notebook, tích hợp kiểu cũ &
+Ứng dụng hội thoại dữ liệu production\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Repo Vanna được đánh dấu lưu trữ (read-only) trên GitHub vào ngày 29/03/2026
+tại thời điểm truy cập báo cáo. Vì vậy, khi triển khai cần khóa phiên bản,
+kiểm toán dependency và lập kế hoạch bảo trì nội bộ hoặc đánh giá nhánh kế
+nhiệm \cite{vanna2026}.
+
+\subsection{Bảng ánh xạ kỹ thuật}
+
+\begin{longtable}{>{\bfseries}p{3.2cm}p{5.0cm}p{6.0cm}}
+\caption{Ánh xạ kỹ thuật Google Cloud sang thành phần triển khai Vanna}\\
+\toprule
+Kỹ thuật & Mục đích & Cách hiện thực đề xuất\\
+\midrule
+\endfirsthead
+\toprule
+Kỹ thuật & Mục đích & Cách hiện thực đề xuất\\
+\midrule
+\endhead
+Truy hồi schema & Chọn bảng/cột liên quan &
+Vector store/metadata catalog, filter theo miền và quyền\\
+In-context examples & Hướng dẫn join và KPI đúng &
+Memory chứa cặp câu hỏi-SQL đã xác nhận\\
+Lớp ngữ nghĩa & Đồng nhất ngôn ngữ nghiệp vụ &
+View phân tích, metric catalog, tài liệu trong prompt\\
+Phân giải thực thể & Ánh xạ tên gọi sang giá trị dữ liệu &
+Tool tìm kiếm giá trị, fuzzy matching, bước xác nhận\\
+Disambiguation & Không tự đoán câu hỏi mơ hồ &
+Agent sinh câu hỏi làm rõ trước khi gọi SQL tool\\
+Kiểm chứng/sửa lỗi & Phát hiện và sửa lỗi &
+Middleware hoặc tool parser/dry-run, trả lỗi có cấu trúc cho agent\\
+Self-consistency & Giảm phụ thuộc một lần sinh &
+Sinh $k$ ứng viên, kiểm tra và chọn theo điểm tin cậy\\
+User-aware security & Bảo vệ dữ liệu theo người dùng &
+UserResolver, nhóm quyền, RLS và SQL policy tool\\
+\bottomrule
+\end{longtable}
+
+\section{Phương án triển khai hệ thống đề xuất}
+
+\subsection{Kiến trúc logic}
+
+\begin{enumerate}
+  \item \textbf{Kênh người dùng:} web chat hoặc tích hợp cổng nghiệp vụ.
+  \item \textbf{API và xác thực:} FastAPI nhận cookie/JWT, ánh xạ thành
+  \texttt{User} và nhóm quyền.
+  \item \textbf{Orchestrator:} Vanna Agent quản lý hội thoại, truy hồi ngữ
+  cảnh, gọi LLM và công cụ.
+  \item \textbf{Context service:} metadata catalog, semantic layer, vector
+  index và kho ví dụ SQL đã xác nhận.
+  \item \textbf{Validation gateway:} parser, chính sách SQL, dry-run, timeout,
+  LIMIT và vòng sửa lỗi.
+  \item \textbf{Data access:} tài khoản chỉ đọc, view nghiệp vụ, RLS và cache.
+  \item \textbf{Quan sát hệ thống:} audit log, trace, latency, token, lỗi và
+  phản hồi đúng/sai.
+\end{enumerate}
+
+\subsection{Luồng xử lý trực tuyến}
+
+\begin{table}[H]
+\centering
+\caption{Quy trình xử lý một câu hỏi}
+\begin{tabularx}{\textwidth}{>{\centering\arraybackslash\bfseries}p{1.1cm}p{4.0cm}X}
+\toprule
+Bước & Thành phần & Xử lý\\
+\midrule
+1 & Web/API & Nhận câu hỏi, danh tính, lịch sử hội thoại\\
+2 & Intent router & Xác định miền dữ liệu và mức mơ hồ\\
+3 & Context retriever & Lấy bảng/cột, tài liệu, ví dụ và quyền liên quan\\
+4 & Agent/LLM & Hỏi làm rõ hoặc sinh ứng viên SQL theo dialect\\
+5 & Validation gateway & Kiểm tra quyền, parse, dry-run và chi phí\\
+6 & SQL tool & Thực thi read-only trong giới hạn tài nguyên\\
+7 & Agent & Kiểm tra kết quả, sửa lỗi nếu cần, tạo diễn giải\\
+8 & UI & Stream bảng, biểu đồ, SQL (nếu được phép) và tóm tắt\\
+9 & Audit/eval & Lưu trace và phản hồi để cải thiện kho ví dụ\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Khảo nghiệm hiện tại}
+
+PoC đã được triển khai và kiểm thử theo cấu hình:
+\textbf{FastAPI + Vanna 2.0 + Ollama + PostgreSQL trên Neon}. Ollama chạy
+\texttt{llama3.2} tại máy cục bộ nên không phát sinh chi phí API LLM. Thành
+phần Vanna sử dụng \texttt{PostgresRunner} để kết nối tới chuỗi
+\texttt{DATABASE\_URL} của Neon có bật SSL. Với ứng dụng, chuỗi kết nối pooled
+được ưu tiên nhằm quản lý số lượng kết nối hiệu quả \cite{neon2026}.
+
+\begin{table}[H]
+\centering
+\caption{Cấu trúc dữ liệu PostgreSQL trong khảo nghiệm}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{3.5cm}X p{2.7cm}}
+\toprule
+Nhóm & Bảng và chức năng & Số bản ghi\\
+\midrule
+Khách hàng & \texttt{regions}, \texttt{customers} & 5; 500\\
+Danh mục hàng hóa & \texttt{categories}, \texttt{suppliers},
+\texttt{products} & 4; 8; 30\\
+Giao dịch & \texttt{sales\_channels}, \texttt{orders},
+\texttt{order\_items} & 3; 10.000; 20.000\\
+Thanh toán và hoàn hàng & \texttt{payments}, \texttt{returns}
+& 10.000; 801\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Mười bảng được liên kết bằng khóa chính và khóa ngoại. View
+\texttt{sales\_enriched} hợp nhất khách hàng, khu vực, sản phẩm, danh mục,
+nhà cung cấp, kênh bán, thanh toán và hoàn hàng thành 20.000 dòng phân tích.
+Dữ liệu trải từ tháng 01/2025 đến tháng 06/2026. Các chỉ tiêu doanh thu và
+lợi nhuận chỉ tính đơn có \texttt{status = 'Completed'}; tỷ lệ hoàn hàng dùng
+tập đơn hoặc số lượng trả tùy định nghĩa chỉ tiêu.
+
+Do model local có thể phát tool call dưới dạng chuỗi JSON thay vì cấu trúc
+function calling, lớp tích hợp được bổ sung bộ phân tích tool call dạng text.
+Các truy vấn nghiệp vụ trọng yếu có mẫu SQL xác định; yêu cầu đồng thời trong
+một hội thoại bị khóa ở phía API; file CSV của truy vấn gần nhất được theo dõi
+để công cụ biểu đồ luôn đọc đúng kết quả. Đây là các biện pháp ổn định hóa
+phù hợp với model nhỏ, không thay thế validation gateway ở môi trường
+production.
+
+\begin{lstlisting}[language=SQL,caption={Ví dụ view ngữ nghĩa giúp model local sinh SQL ổn định}]
+SELECT
+    order_date,
+    region,
+    product_name,
+    quantity,
+    revenue,
+    profit
+FROM sales_enriched
+WHERE status = 'Completed';
+\end{lstlisting}
+
+\subsection{Chiến lược bảo mật}
+
+\begin{enumerate}
+  \item Trước production, tạo role \texttt{vanna\_reader} chỉ có quyền
+  \texttt{CONNECT}, \texttt{USAGE} schema và \texttt{SELECT}; không dùng role
+  quản trị của Neon cho agent.
+  \item Chỉ cho phép truy vấn các view đã kiểm duyệt; che cột nhạy cảm.
+  \item Áp chính sách RLS tại cơ sở dữ liệu, không chỉ trong prompt.
+  \item SQL phải qua parser và policy engine trước khi thực thi.
+  \item Không gửi dữ liệu mẫu nhạy cảm ra LLM bên ngoài nếu chưa có phê duyệt.
+  \item Mã hóa kết nối, quản lý secret tập trung và xoay vòng khóa.
+  \item Lưu audit bất biến và cơ chế truy vết từ câu trả lời về SQL/nguồn.
+\end{enumerate}
+
+\section{Phương pháp đánh giá và tiêu chí nghiệm thu}
+
+\subsection{Bộ dữ liệu kiểm thử}
+
+Xây bộ câu hỏi do chuyên gia nghiệp vụ xác nhận, phân tầng theo độ khó:
+
+\begin{itemize}
+  \item truy vấn một bảng, filter và tổng hợp đơn giản;
+  \item join nhiều bảng, thời gian, top-k và so sánh kỳ;
+  \item thuật ngữ nghiệp vụ, entity gần đúng và câu hỏi mơ hồ;
+  \item truy vấn có nguy cơ vượt quyền hoặc tiêu tốn tài nguyên;
+  \item câu hỏi không thể trả lời từ dữ liệu hiện có.
+\end{itemize}
+
+Mỗi mẫu cần có SQL chuẩn hoặc tập kết quả chuẩn, các cách diễn đạt tương
+đương, quyền người dùng, dialect và mức độ chấp nhận.
+
+\subsection{Hệ chỉ số}
+
+\begin{table}[H]
+\centering
+\caption{Các chỉ số đánh giá đề xuất}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{3.1cm}X p{3.2cm}}
+\toprule
+Chỉ số & Ý nghĩa & Cách đo\\
+\midrule
+Execution success & SQL chạy được & Tỷ lệ không lỗi DB\\
+Result accuracy & Kết quả đúng với đáp án & So sánh tập kết quả\\
+Semantic correctness & Đúng KPI, filter và phạm vi & Chuyên gia/LLM-judge có rubric\\
+Clarification quality & Hỏi lại đúng khi mơ hồ & Precision/recall phát hiện mơ hồ\\
+Safety pass rate & Không vượt quyền/chính sách & Bộ test tấn công và policy logs\\
+Latency & Thời gian phản hồi & P50/P95 theo độ khó\\
+Repair rate & Tỷ lệ sửa thành công sau lỗi & Số vòng và tỷ lệ hoàn tất\\
+User acceptance & Người dùng chấp nhận câu trả lời & Phản hồi đúng/sai, CSAT\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Exact string match chỉ phù hợp để tham khảo vì hai câu SQL khác nhau có thể
+trả cùng kết quả. Do đó, trọng tâm nên là execution accuracy, result accuracy
+và semantic correctness. Google Cloud khuyến nghị kết hợp metric người dùng,
+offline eval, đánh giá con người và LLM-as-a-judge; LLM-as-a-judge phải dùng
+rubric rõ và không thay thế hoàn toàn chuyên gia \cite{google2025}.
+
+\subsection{Thiết kế thử nghiệm đối chứng}
+
+Để đo đóng góp của từng kỹ thuật, thực hiện ablation test:
+
+\begin{enumerate}
+  \item Baseline chỉ có schema.
+  \item Thêm ví dụ SQL tĩnh.
+  \item Thêm truy hồi ví dụ theo ngữ nghĩa.
+  \item Thêm semantic layer và entity resolution.
+  \item Thêm disambiguation.
+  \item Thêm validation/repair.
+  \item Thêm self-consistency cho nhóm câu hỏi rủi ro cao.
+\end{enumerate}
+
+Mỗi cấu hình chạy cùng bộ câu hỏi, cùng model và tham số. Báo cáo chênh lệch
+độ chính xác, độ trễ, chi phí và tỷ lệ vi phạm chính sách.
+
+\section{Kế hoạch thực hiện và quản trị rủi ro}
+
+\subsection{Lộ trình bốn giai đoạn}
+
+\begin{longtable}{>{\bfseries}p{2.2cm}p{4.0cm}p{5.1cm}p{3.2cm}}
+\caption{Lộ trình triển khai đề xuất}\\
+\toprule
+Giai đoạn & Mục tiêu & Công việc chính & Đầu ra\\
+\midrule
+\endfirsthead
+\toprule
+Giai đoạn & Mục tiêu & Công việc chính & Đầu ra\\
+\midrule
+\endhead
+1. Chuẩn bị & Chọn miền dữ liệu hẹp &
+Kiểm kê schema, KPI, quyền; xây 50-100 câu hỏi chuẩn &
+Data contract và bộ eval v1\\
+2. PoC & Chứng minh luồng end-to-end &
+Vanna agent, 1 DB read-only, RAG cơ bản, validation &
+Demo nội bộ và báo cáo baseline\\
+3. Pilot & Kiểm thử với người dùng thật &
+RLS, audit, feedback, monitoring, ablation test &
+Chỉ số P50/P95 và acceptance\\
+4. Production & Vận hành có kiểm soát &
+HA, cache, secret, CI/CD eval, rollback, SOP &
+SLA, dashboard và quy trình hỗ trợ\\
+\bottomrule
+\end{longtable}
+
+\subsection{Ma trận rủi ro}
+
+\begin{table}[H]
+\centering
+\caption{Rủi ro chính và biện pháp giảm thiểu}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{3.1cm}p{2.0cm}X}
+\toprule
+Rủi ro & Mức độ & Biện pháp\\
+\midrule
+Bịa bảng/cột & Cao & Truy hồi schema, parser, kiểm tra catalog, repair\\
+Đúng SQL nhưng sai KPI & Cao & Semantic layer, golden query, review nghiệp vụ\\
+Rò rỉ dữ liệu & Rất cao & RLS tại DB, view kiểm duyệt, masking, audit\\
+Truy vấn tốn tài nguyên & Cao & Dry-run/EXPLAIN, timeout, LIMIT, quota\\
+Schema thay đổi & Trung bình & Version metadata, phát hiện drift, CI eval\\
+Model local yếu & Trung bình & Context ngắn và rõ, view ngữ nghĩa, model routing\\
+Repo ngừng bảo trì & Trung bình & Pin phiên bản, fork nội bộ, SBOM và kế hoạch thay thế\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Kết luận và đề xuất hành động}
+
+Text-to-SQL không phải bài toán ``chọn một LLM rồi yêu cầu viết SQL''. Hệ
+thống đáng tin cậy phải kết hợp ngữ cảnh doanh nghiệp, truy hồi thông minh,
+làm rõ ý định, sinh SQL theo dialect, kiểm chứng xác định, phân quyền và đánh
+giá liên tục. Google Cloud cung cấp khung kỹ thuật nâng độ chính xác; Vanna
+cung cấp nền tảng triển khai agent, công cụ SQL, UI và tích hợp hệ thống.
+
+Kết quả hiện thực cho thấy kiến trúc có thể vận hành với LLM local và cơ sở
+dữ liệu PostgreSQL từ xa: giao diện nhận câu hỏi tiếng Việt, agent gọi công cụ
+SQL, Neon trả dữ liệu, sau đó hệ thống hiển thị bảng hoặc biểu đồ. Việc chuyển
+từ SQLite sang 10 bảng PostgreSQL cũng cho phép kiểm thử join, tổng hợp, lợi
+nhuận và hoàn hàng trong mô hình gần với hệ thống nghiệp vụ hơn.
+
+\textbf{Đề xuất triển khai:}
+
+\begin{enumerate}
+  \item Nghiệm thu PoC Neon PostgreSQL hiện tại trên bộ dữ liệu tổng hợp,
+  sau đó tạo role chỉ đọc trước khi kết nối dữ liệu nghiệp vụ.
+  \item Xây semantic layer và bộ 100 câu hỏi-SQL chuẩn trước khi mở rộng model.
+  \item Bổ sung validation gateway và RLS trước khi cho người dùng nghiệp vụ
+  truy cập.
+  \item Đo result accuracy, safety và P95 latency theo từng phiên bản; chỉ
+  phát hành nếu không hồi quy trên bộ eval.
+  \item Do repo Vanna đã ở trạng thái archive, thực hiện đánh giá license,
+  dependency và phương án fork/bảo trì nội bộ trước production.
+\end{enumerate}
+
+\methodbox{Kết luận cuối cùng}{%
+Giá trị cạnh tranh nằm ở chất lượng lớp ngữ nghĩa, kho ví dụ đã xác nhận và
+cơ chế kiểm chứng, không nằm riêng ở model. Phương án phù hợp là dùng Vanna
+làm lớp điều phối có thể thay thế, giữ metadata, policy và bộ eval ở các
+thành phần độc lập để giảm khóa chặt công nghệ.}
+
+\vfill
+\begin{flushright}
+\textbf{Người thực hiện}\\
+\textit{(Đã lập báo cáo)}\\[0.8cm]
+\textbf{Lê Đức Anh}
+\end{flushright}
+
+\clearpage
+\renewcommand{\refname}{Tài liệu tham khảo}
+\addcontentsline{toc}{section}{Tài liệu tham khảo}
+\begin{thebibliography}{9}
+
+\bibitem{google2025}
+Per Jacobsson,
+\textit{Getting AI to write good SQL: Text-to-SQL techniques explained},
+Google Cloud Blog, 16/05/2025.
+\url{https://cloud.google.com/blog/products/databases/techniques-for-improving-text-to-sql}.
+Truy cập ngày 30/07/2026.
+
+\bibitem{vanna2026}
+Vanna AI,
+\textit{Vanna 2.0: Turn Questions into Data Insights},
+GitHub repository \texttt{vanna-ai/vanna}, phiên bản mã nguồn tham chiếu
+2.0.2 trong môi trường khảo nghiệm.
+\url{https://github.com/vanna-ai/vanna}.
+Truy cập ngày 30/07/2026.
+
+\bibitem{vannalegacy}
+Vanna AI,
+\textit{Vanna Legacy README: RAG framework for SQL generation},
+tệp \texttt{README\_LEGACY.md} trong repository Vanna.
+\url{https://github.com/vanna-ai/vanna/blob/main/README_LEGACY.md}.
+Truy cập ngày 30/07/2026.
+
+\bibitem{vannapaper2023}
+Vanna AI,
+\textit{AI SQL Accuracy: Testing different LLMs and context strategies to
+maximize SQL generation accuracy}, 17/08/2023.
+\url{https://github.com/vanna-ai/vanna/blob/main/papers/ai-sql-accuracy-2023-08-17.md}.
+Truy cập ngày 30/07/2026.
+
+\bibitem{neon2026}
+Neon,
+\textit{Connection pooling},
+tài liệu kết nối PostgreSQL và pooled connection cho ứng dụng.
+\url{https://neon.com/docs/connect/connection-pooling}.
+Truy cập ngày 31/07/2026.
+
+\end{thebibliography}
+
+\end{document}
