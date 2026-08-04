@@ -32,6 +32,8 @@
 \usepackage{listings}
 \usepackage{setspace}
 \usepackage{microtype}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 \definecolor{vnptblue}{HTML}{006FD6}
 \definecolor{deepblue}{HTML}{004E92}
@@ -272,6 +274,33 @@ Baseline (1 người dùng) & $\approx 2{,}5$ giây/truy vấn\\
 \end{tabularx}
 \end{table}
 
+\subsection{Cấu hình phần cứng}
+
+Toàn bộ hệ thống (ứng dụng, mô hình Ollama và công cụ k6) chạy trên cùng một máy
+trạm; cơ sở dữ liệu PostgreSQL đặt từ xa trên Neon (cloud). Đây là mô hình
+kiểm thử một máy (single-node), phù hợp cho giai đoạn PoC.
+
+\begin{table}[H]
+\centering
+\caption{Thông số phần cứng máy chạy kiểm thử}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{4.2cm}X}
+\toprule
+Thành phần & Thông số\\
+\midrule
+CPU & AMD Ryzen 7 8845H (8 nhân / 16 luồng)\\
+GPU & AMD Radeon 780M (đồ hoạ tích hợp)\\
+RAM & 16 GB (khoảng 13,8 GB khả dụng; phần còn lại chia sẻ cho GPU tích hợp)\\
+Hệ điều hành & Windows 11 Home\\
+Vị trí cơ sở dữ liệu & Neon (PostgreSQL đám mây, kết nối qua SSL)\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\noindent\textbf{Ghi chú:} Do máy sử dụng \textbf{GPU tích hợp} (không có GPU rời),
+mô hình \texttt{llama3.2} suy luận chủ yếu trên CPU. Đây là yếu tố phần cứng trực
+tiếp giới hạn tốc độ và mức độ song song của mô hình, và cần được tính đến khi
+diễn giải kết quả kiểm thử.
+
 \subsection{Đặc điểm kỹ thuật ảnh hưởng đến hiệu năng}
 
 \begin{itemize}
@@ -309,6 +338,21 @@ export const options = {
   },
 };
 \end{lstlisting}
+
+\subsection{Bộ câu hỏi kiểm thử}
+
+Mỗi người dùng ảo chọn ngẫu nhiên một câu hỏi trong tập câu hỏi nghiệp vụ tiếng
+Việt dưới đây. Các câu hỏi thuộc nhóm đếm và tổng hợp đơn giản nhằm cô lập chi phí
+suy luận của mô hình (tách khỏi chi phí truy vấn SQL phức tạp):
+
+\begin{enumerate}
+  \item ``Có bao nhiêu người dùng trong hệ thống?''
+  \item ``Có bao nhiêu đơn vị trong bảng \texttt{units}?''
+  \item ``Có bao nhiêu \texttt{spdv\_tickets}?''
+  \item ``Đếm số người dùng theo trạng thái.''
+  \item ``Liệt kê 5 đơn vị đầu tiên theo tên.''
+  \item ``Có bao nhiêu sự kiện trong \texttt{spdv\_ticket\_events}?''
+\end{enumerate}
 
 % ======================= 3. KET QUA =======================
 \section{Kết quả kiểm thử}
@@ -352,6 +396,61 @@ Chậm nhất (max)    & 2,5   & 89,28 & \bad{157,20}\\
 \end{tabularx}
 \end{table}
 
+\subsection{Biểu đồ trực quan}
+
+Hình~\ref{fig:latency} so sánh phân bố thời gian phản hồi giữa hai mức tải. Có thể
+thấy độ trễ tăng rất mạnh ở các percentile cao khi chuyển từ 30 lên 50 người dùng:
+p95 nhảy từ 55 giây lên 139 giây.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=13pt,
+  width=0.95\textwidth, height=7cm,
+  ylabel={Thời gian phản hồi (giây)},
+  symbolic x coords={Median, p90, p95, Max},
+  xtick=data,
+  ymin=0, ymax=175,
+  legend style={at={(0.02,0.98)},anchor=north west,font=\small},
+  nodes near coords, nodes near coords style={font=\tiny,/pgf/number format/fixed},
+  enlarge x limits=0.22,
+]
+\addplot[fill=vnptblue,draw=deepblue] coordinates {(Median,19.43) (p90,32.71) (p95,55.11) (Max,89.28)};
+\addplot[fill=warnorange!80,draw=dangerred] coordinates {(Median,23.26) (p90,108.40) (p95,139.16) (Max,157.20)};
+\legend{30 người dùng, 50 người dùng}
+\end{axis}
+\end{tikzpicture}
+\caption{So sánh phân bố thời gian phản hồi AI ở mức 30 và 50 người dùng đồng thời.}
+\label{fig:latency}
+\end{figure}
+
+Hình~\ref{fig:scaling} cho thấy đặc trưng bão hoà: thời gian phản hồi trung bình
+tăng gần tuyến tính theo số người dùng, trong khi thông lượng không tăng --- dấu
+hiệu điển hình của một hệ thống đã chạm trần xử lý.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.95\textwidth, height=6.5cm,
+  xlabel={Số người dùng đồng thời}, ylabel={Thời gian TB (giây)},
+  xtick={1,30,50}, ymin=0,
+  ymajorgrids=true, grid style={dashed,gray!30},
+  mark size=2.6pt,
+  nodes near coords, nodes near coords style={font=\small},
+  point meta=explicit symbolic,
+]
+\addplot[color=vnptblue,thick,mark=*] coordinates {
+  (1,2.5)[2,5s] (30,20.9)[20,9s] (50,36.28)[36,3s]
+};
+\end{axis}
+\end{tikzpicture}
+\caption{Thời gian phản hồi trung bình tăng gần tuyến tính theo số người dùng
+(baseline $\to$ 30 $\to$ 50), trong khi thông lượng giữ nguyên $\approx 0{,}7$ req/giây.}
+\label{fig:scaling}
+\end{figure}
+
 \subsection{Diễn biến theo mức tải}
 
 \begin{table}[H]
@@ -379,6 +478,26 @@ request/giây). Điều này chứng minh hệ thống đã \textbf{đạt trầ
 $\approx 0{,}7$--$0{,}75$ request/giây. Việc tăng thêm người dùng không làm tăng
 năng lực xử lý mà chỉ kéo dài hàng đợi, khiến độ trễ và tỉ lệ lỗi tăng vọt.
 
+\subsection{Giải thích bằng định luật Little}
+
+Định luật Little trong lý thuyết hàng đợi phát biểu:
+\[
+ L = \lambda \times W
+\]
+trong đó $L$ là số yêu cầu trung bình đang trong hệ thống (mức đồng thời),
+$\lambda$ là thông lượng (request/giây) và $W$ là thời gian phản hồi trung bình.
+Khi hệ thống đã bão hoà, thông lượng $\lambda$ bị chặn trên bởi năng lực xử lý:
+\[
+ \lambda_{\max} \approx \frac{N_{\text{song song}}}{W_{\text{phục vụ}}}
+\]
+Với thời gian phục vụ cơ sở $W_{\text{phục vụ}} \approx 2{,}5$ giây (đo ở baseline)
+và thông lượng trần quan sát được $\approx 0{,}75$ req/giây, có thể suy ra mức song
+song hiệu dụng $N_{\text{song song}} \approx 0{,}75 \times 2{,}5 \approx 1{,}9$.
+Con số này phù hợp với việc Ollama chỉ xử lý được khoảng \textbf{2 yêu cầu song
+song} trên cấu hình phần cứng hiện tại (CPU + GPU tích hợp). Khi số người dùng
+vượt xa mức này, mọi yêu cầu tăng thêm chỉ làm dài thời gian chờ $W$ (theo đúng
+$L = \lambda \times W$ với $\lambda$ cố định), chứ không nâng được thông lượng.
+
 \subsection{Nút thắt cổ chai: mô hình ngôn ngữ cục bộ}
 
 Nguyên nhân chính là \textbf{Ollama chạy cục bộ xử lý gần như tuần tự}. Với hai
@@ -398,6 +517,53 @@ Uvicorn chỉ chạy \textbf{một tiến trình worker} duy nhất.
 Năng lực của hệ thống được quyết định bởi tốc độ suy luận của mô hình ngôn ngữ,
 không phải bởi cơ sở dữ liệu hay tầng ứng dụng. Do đó, mọi phương án nâng cao khả
 năng chịu tải phải ưu tiên gỡ nút thắt LLM trước tiên.}
+
+% ======================= TIEU CHI NGHIEM THU =======================
+\section{Đánh giá theo tiêu chí nghiệm thu (SLA)}
+
+Bảng~\ref{tab:sla} đối chiếu kết quả đo với các ngưỡng chất lượng dịch vụ đề xuất
+cho một hệ thống hỏi đáp tương tác. Ở mức 30 và 50 người dùng, hệ thống
+\textbf{không đạt} cả ba tiêu chí; các ngưỡng này chỉ được thoả mãn khi số người
+dùng đồng thời ở mức thấp ($\leq 10$).
+
+\begin{table}[H]
+\centering
+\caption{Đối chiếu kết quả với tiêu chí nghiệm thu đề xuất}
+\label{tab:sla}
+\begin{tabularx}{\textwidth}{>{\bfseries}Xccc}
+\toprule
+\rowcolor{lightblue}
+Tiêu chí & Ngưỡng mục tiêu & 30 user & 50 user\\
+\midrule
+Độ trễ p95        & $< 10$ giây & \bad{Không đạt} & \bad{Không đạt}\\
+Tỉ lệ thành công  & $\geq 99\%$ & \bad{Không đạt} & \bad{Không đạt}\\
+Tỉ lệ lỗi         & $\leq 1\%$  & \bad{Không đạt} & \bad{Không đạt}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\methodbox{Sức chứa an toàn ước tính}{%
+Với ngưỡng p95 dưới 10 giây và tỉ lệ lỗi dưới 1\%, cấu hình hiện tại chỉ nên phục
+vụ tối đa \textbf{5--10 người dùng đồng thời}. Để phục vụ nhiều hơn, cần áp dụng
+các khuyến nghị ở Mục~7 trước khi đưa vào sử dụng thực tế.}
+
+% ======================= GIOI HAN =======================
+\section{Giới hạn của kiểm thử}
+
+Kết quả trong báo cáo cần được diễn giải trong phạm vi các giới hạn sau:
+
+\begin{itemize}
+  \item \textbf{Mô hình một máy:} ứng dụng, mô hình Ollama và công cụ k6 chạy trên
+  cùng một máy, nên có sự cạnh tranh tài nguyên CPU giữa bên tạo tải và bên xử lý.
+  \item \textbf{Phần cứng tiêu dùng:} máy dùng GPU tích hợp, không đại diện cho cấu
+  hình máy chủ production có GPU rời; kết quả tuyệt đối sẽ khác trên hạ tầng mạnh hơn.
+  \item \textbf{Câu hỏi đơn giản:} bộ câu hỏi thiên về đếm/tổng hợp; câu hỏi phức
+  tạp (nhiều join, cửa sổ thời gian) sẽ làm tăng cả chi phí SQL lẫn suy luận.
+  \item \textbf{Độ dài kiểm thử:} mỗi kịch bản kéo dài vài phút, chưa đánh giá độ ổn
+  định dài hạn (rò rỉ bộ nhớ, suy giảm hiệu năng theo thời gian).
+  \item \textbf{Cơ sở dữ liệu đám mây:} độ trễ mạng tới Neon có thể dao động theo
+  thời điểm, ảnh hưởng nhỏ đến kết quả.
+\end{itemize}
 
 % ======================= 5. KET LUAN =======================
 \section{Kết luận}
@@ -448,6 +614,45 @@ Cải thiện trải nghiệm khi tải cao\\
 \textit{(Đã lập báo cáo)}\\[0.8cm]
 \textbf{Lê Đức Anh}
 \end{flushright}
+
+\clearpage
+% ======================= PHU LUC =======================
+\section*{Phụ lục A. Kịch bản k6 (rút gọn)}
+\addcontentsline{toc}{section}{Phụ lục A. Kịch bản k6}
+
+\begin{lstlisting}[language=JS,caption={Logic phát tải và đo lường của mỗi người dùng ảo}]
+import http from 'k6/http';
+import { check } from 'k6';
+import { Trend, Rate, Counter } from 'k6/metrics';
+
+const aiResponseTime = new Trend('ai_response_time', true);
+const aiSuccessRate  = new Rate('ai_success_rate');
+const aiErrors       = new Counter('ai_errors');
+
+export default function () {
+  // conversation_id duy nhat -> tranh khoa 409 theo hoi thoai
+  const uid = `lt-${__VU}-${__ITER}-${Date.now()}-${Math.random()}`;
+  const question = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)];
+
+  const res = http.post(ENDPOINT,
+    JSON.stringify({ message: question, conversation_id: uid, request_id: uid }),
+    { headers: { 'Content-Type': 'application/json' }, timeout: '180s' });
+
+  aiResponseTime.add(res.timings.duration);
+  const ok = res.status === 200 && String(res.body).includes('data: [DONE]');
+  aiSuccessRate.add(ok);
+  if (!ok) aiErrors.add(1);
+
+  check(res, {
+    'HTTP 200': (r) => r.status === 200,
+    'stream hoan tat': (r) => String(r.body).includes('data: [DONE]'),
+  });
+}
+\end{lstlisting}
+
+\noindent Mã nguồn đầy đủ và số liệu thô có trong thư mục \texttt{loadtest/} của
+kho mã: \texttt{ai\_load\_test.js}, \texttt{ai\_load\_test\_50.js},
+\texttt{k6\_summary.json}, \texttt{k6\_summary\_50.json}.
 
 \clearpage
 \renewcommand{\refname}{Tài liệu tham khảo}
