@@ -197,8 +197,8 @@ Công cụ kiểm thử: & k6 v2.1.0, kịch bản \texttt{ramping-vus}\\
 Hạ tầng AI: & Ollama \texttt{llama3.2} cục bộ, PostgreSQL trên Neon\\
 Mức tải: & 5 $\to$ 15 $\to$ 30 người dùng và cao điểm 50 người dùng\\
 Kết quả trước tối ưu: & 50 user: tỉ lệ lỗi 13\%, p95 = 139 giây\\
-Kết quả sau tối ưu: & 50 user: tỉ lệ lỗi 0\%, p95 = 55,7 giây, thông lượng $+57\%$\\
-Nút thắt còn lại: & Tốc độ sinh token của LLM trên CPU ($\approx 18$ token/giây)\\
+Kết quả sau tối ưu: & 50 user: tỉ lệ lỗi 0\%, p95 = 47,0 giây, thông lượng $+196\%$\\
+Nút thắt còn lại: & Tốc độ sinh token của LLM trên CPU (cần gấp $\approx 5$ lần)\\
 \end{tabularx}
 \vspace{0.10cm}
 \end{minipage}}
@@ -241,9 +241,11 @@ lần chờ cơ sở dữ liệu hoặc chờ mô hình sinh chữ, \textbf{toà
 Ngoài ra mỗi truy vấn còn mở một kết nối mới tới Neon, tốn một lượt bắt tay TLS
 xuyên quốc gia trước khi chạy được câu lệnh.
 
-Sau khi khắc phục (xem Mục~\ref{sec:toiuu}), kiểm thử lại ở đúng mức 50 người dùng cho kết quả:
-tỉ lệ thành công \ok{100\%} (từ 87\%), thông lượng \ok{tăng 57\%} và p95
-\ok{giảm 60\%} xuống 55,7 giây.
+Sau khi khắc phục (Mục~\ref{sec:toiuu}) và phát hiện thêm rằng
+\texttt{OLLAMA\_NUM\_PARALLEL} để mặc định bằng 1 --- tức máy chủ mô hình xử lý
+tuần tự --- nâng tham số này lên 4 (Mục~\ref{sec:thunghiem}), kiểm thử lại ở đúng
+mức 50 người dùng cho kết quả: tỉ lệ thành công \ok{100\%} (từ 87\%), thông lượng
+\ok{tăng 196\%} lên 2,07 req/giây và p95 \ok{giảm 66\%} xuống 47,0 giây.
 
 \methodbox{Kết luận nhanh}{%
 Đợt tối ưu tầng ứng dụng đã \textbf{loại bỏ hoàn toàn lỗi} ở mức 50 người dùng và
@@ -671,13 +673,130 @@ Chỉ số phản ánh đúng năng lực hệ thống là thông lượng: $+57
 $55{,}7$ giây vẫn cách rất xa ngưỡng SLA 10 giây. Phần còn lại phụ thuộc vào năng
 lực suy luận, tức phần cứng hoặc lựa chọn mô hình.}
 
+% ======================= THU NGHIEM CAU HINH SUY LUAN =======================
+\section{Thử nghiệm cấu hình tầng suy luận}
+\label{sec:thunghiem}
+
+Sau đợt tối ưu mã nguồn, bốn phương án cấu hình tầng suy luận được thử nghiệm để
+xác định xem có thể gỡ tiếp nút thắt mà không cần đầu tư phần cứng hay không. Mọi
+thử nghiệm dùng chung kịch bản, bộ câu hỏi và mã nguồn đã tối ưu; chỉ khác cấu
+hình Ollama hoặc mô hình.
+
+\subsection{Số lượng luồng suy luận song song}
+
+Rà soát nhật ký Ollama phát hiện tham số mặc định trên máy kiểm thử là
+\texttt{OLLAMA\_NUM\_PARALLEL:1} --- nghĩa là máy chủ mô hình chỉ xử lý
+\textbf{một} yêu cầu tại một thời điểm, mọi yêu cầu còn lại xếp hàng. Đây là một
+tham số cấu hình, không phải giới hạn phần cứng.
+
+\begin{table}[H]
+\centering
+\caption{So sánh các cấu hình tầng suy luận tại mức 50 người dùng đồng thời}
+\label{tab:thunghiem}
+\begin{tabularx}{\textwidth}{>{\bfseries}Xcccccc}
+\toprule
+\rowcolor{lightblue}
+Cấu hình & Request & RPS & Trung vị & p90 & p95 & Max\\
+\midrule
+NP=1 (CPU)          & 203 & 1,10 & 39,85 & 52,59 & 55,69 & 61,14\\
+\rowcolor{lightblue!60}
+\textbf{NP=4 (CPU)} & \ok{360} & \ok{2,07} & \ok{19,48} & \ok{26,64} & \ok{46,97} & 61,31\\
+NP=4 + iGPU         & \bad{192} & \bad{1,03} & 40,35 & \bad{62,29} & \bad{65,42} & \bad{71,36}\\
+NP=8 (CPU)          & \bad{169} & \bad{0,97} & 36,48 & \bad{62,73} & \bad{121,63} & \bad{142,86}\\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.15cm}
+{\small Đơn vị thời gian: giây. NP $=$ \texttt{OLLAMA\_NUM\_PARALLEL}.
+Cả bốn cấu hình đều đạt tỉ lệ thành công 100\%.}
+\end{table}
+
+Nâng \texttt{NUM\_PARALLEL} từ 1 lên 4 làm \textbf{tăng gấp đôi thông lượng}
+($1{,}10 \to 2{,}07$ req/giây) và giảm trung vị 51\%. Cơ chế ở đây là gộp lô liên
+tục (continuous batching): sinh token bị chặn bởi băng thông bộ nhớ chứ không phải
+bởi phép tính, nên xử lý bốn luồng cùng lúc chia sẻ được chi phí đọc trọng số mô
+hình. Đây là lý do batching vẫn có hiệu quả ngay cả khi chạy hoàn toàn trên CPU.
+
+\subsection{Ba phương án bị bác bỏ bằng số liệu}
+
+\begin{itemize}
+  \item \textbf{Dùng GPU tích hợp (Radeon 780M).} Ollama mặc định bỏ qua GPU tích
+  hợp; bật bằng \texttt{OLLAMA\_IGPU\_ENABLE=1} thì \texttt{ollama ps} xác nhận
+  \texttt{100\% GPU}. Tuy nhiên thông lượng \textbf{giảm 47\%} so với CPU. Nguyên
+  nhân: iGPU dùng chung băng thông bộ nhớ hệ thống với CPU, nên khi gộp lô nó thua
+  8 nhân CPU. Khuyến nghị ``bật tăng tốc ROCm/Vulkan cho 780M'' ở Mục~\ref{sec:khuyennghi}
+  vì vậy \textbf{không còn giá trị} trên cấu hình này.
+  \item \textbf{Tăng \texttt{NUM\_PARALLEL} lên 8.} Bộ nhớ mô hình phình từ 4,1 GB
+  lên 5,9 GB, 8 luồng tranh chấp 8 nhân, p95 vọt lên 121,63 giây. Giá trị 4 là
+  điểm tối ưu trên phần cứng này.
+  \item \textbf{Đổi sang mô hình nhỏ hơn (\texttt{llama3.2:1b}).} Mỗi lượt gọi mô
+  hình mất \textbf{23--27 giây} thay vì 2--4 giây của bản 3B. Mô hình 1B tuân thủ
+  chỉ thị kém hơn nên sinh câu trả lời dài dòng và lặp vòng gọi công cụ, khiến tổng
+  số token phải sinh tăng vọt. \textbf{Nhỏ hơn không đồng nghĩa với nhanh hơn} khi
+  bài toán phụ thuộc vào khả năng gọi công cụ đúng.
+\end{itemize}
+
+\subsection{Kết quả với cấu hình tốt nhất}
+
+\begin{table}[H]
+\centering
+\caption{Kết quả cuối cùng: mã nguồn đã tối ưu và \texttt{NUM\_PARALLEL}=4}
+\label{tab:cuoicung}
+\begin{tabularx}{\textwidth}{>{\bfseries}Xcccc}
+\toprule
+\rowcolor{lightblue}
+Chỉ số & 30 user & 30 user & 50 user & 50 user\\
+\rowcolor{lightblue}
+ & (ban đầu) & (cuối cùng) & (ban đầu) & (cuối cùng)\\
+\midrule
+Tổng số request   & 177 & \ok{357} & 132 & \ok{360}\\
+Thông lượng (req/giây) & 0,75 & \ok{1,61} & 0,70 & \ok{2,07}\\
+Tỉ lệ thành công  & \warn{95,0\%} & \ok{100\%} & \warn{87,1\%} & \ok{100\%}\\
+Số lỗi            & 9 & \ok{0} & \bad{17} & \ok{0}\\
+Trung vị, giây    & 19,43 & \ok{10,03} & 23,26 & \ok{19,48}\\
+p90, giây         & 32,71 & \ok{18,68} & \bad{108,40} & \ok{26,64}\\
+p95, giây         & \bad{55,11} & \ok{23,96} & \bad{139,16} & \ok{46,97}\\
+Max, giây         & 89,28 & \ok{27,79} & \bad{157,20} & \ok{61,31}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+So với hiện trạng ban đầu, thông lượng tăng \textbf{115\%} ở mức 30 người dùng và
+\textbf{196\%} ở mức 50 người dùng, tỉ lệ lỗi về 0\% ở cả hai mức --- toàn bộ đạt
+được bằng sửa mã nguồn và đổi một tham số cấu hình, \textbf{không tốn chi phí phần
+cứng}.
+
+\subsection{Vì sao vẫn không đạt p95 dưới 10 giây}
+\label{sec:p95}
+
+Có thể tính trực tiếp yêu cầu cần thiết. Mỗi lượt gọi mô hình sinh $\approx 120$
+token. Ở cấu hình tốt nhất, thông lượng suy luận tổng đo được là:
+\[
+ 2{,}07\ \text{req/giây} \times \tfrac{1}{6} \times 120\ \text{token} \approx 41\ \text{token/giây}
+\]
+Để đạt p95 dưới 10 giây ở mức 50 người dùng, theo định luật Little cần
+$\lambda \approx 50/5 = 10$ req/giây, tương đương:
+\[
+ 10 \times \tfrac{1}{6} \times 120 \approx 200\ \text{token/giây}
+\]
+Tức cần \textbf{gấp gần 5 lần} năng lực suy luận hiện có (ở mức 30 người dùng vẫn
+cần gấp $\approx 2{,}4$ lần). Cả ba phương án không tốn chi phí đều đã được thử và
+đều không đạt, nên khoảng cách này \textbf{không thể lấp bằng cấu hình hay mã
+nguồn}.
+
+\methodbox{Sức chứa với ngưỡng p95 dưới 10 giây}{%
+Suy từ thông lượng bão hoà $1{,}61$ req/giây ở mức 30 người dùng, cấu hình cuối
+cùng đáp ứng ngưỡng p95 dưới 10 giây ở khoảng \textbf{8--12 người dùng đồng thời}
+(trước tối ưu là 5--10). Muốn phục vụ 30--50 người dùng trong ngưỡng này thì bắt
+buộc phải đầu tư GPU rời hoặc chuyển sang API LLM đám mây.}
+
 % ======================= TIEU CHI NGHIEM THU =======================
 \section{Đánh giá theo tiêu chí nghiệm thu (SLA)}
 
 Bảng~\ref{tab:sla} đối chiếu kết quả đo với các ngưỡng chất lượng dịch vụ đề xuất
-cho một hệ thống hỏi đáp tương tác. Sau tối ưu, hai tiêu chí về \textbf{độ tin cậy
-đã đạt} ở mức 50 người dùng; tiêu chí về \textbf{độ trễ vẫn không đạt} do giới hạn
-tốc độ suy luận trên CPU.
+cho một hệ thống hỏi đáp tương tác. Với cấu hình cuối cùng, hai tiêu chí về
+\textbf{độ tin cậy đã đạt} ở cả mức 30 và 50 người dùng; tiêu chí về \textbf{độ trễ
+vẫn không đạt} do giới hạn tốc độ suy luận trên CPU (xem Mục~\ref{sec:p95}).
 
 \begin{table}[H]
 \centering
@@ -686,23 +805,24 @@ tốc độ suy luận trên CPU.
 \begin{tabularx}{\textwidth}{>{\bfseries}Xcccc}
 \toprule
 \rowcolor{lightblue}
-Tiêu chí & Ngưỡng & 30 user & 50 user & 50 user\\
+Tiêu chí & Ngưỡng & 30 user & 30 user & 50 user\\
 \rowcolor{lightblue}
- & mục tiêu & (trước) & (trước) & (sau tối ưu)\\
+ & mục tiêu & (ban đầu) & (cuối cùng) & (cuối cùng)\\
 \midrule
 Độ trễ p95        & $< 10$ giây & \bad{Không đạt} & \bad{Không đạt} & \bad{Không đạt}\\
-Tỉ lệ thành công  & $\geq 99\%$ & \bad{Không đạt} & \bad{Không đạt} & \ok{Đạt (100\%)}\\
-Tỉ lệ lỗi         & $\leq 1\%$  & \bad{Không đạt} & \bad{Không đạt} & \ok{Đạt (0\%)}\\
+                  &             & (55,11 giây) & (23,96 giây) & (46,97 giây)\\
+Tỉ lệ thành công  & $\geq 99\%$ & \bad{Không đạt} & \ok{Đạt (100\%)} & \ok{Đạt (100\%)}\\
+Tỉ lệ lỗi         & $\leq 1\%$  & \bad{Không đạt} & \ok{Đạt (0\%)} & \ok{Đạt (0\%)}\\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \methodbox{Sức chứa an toàn ước tính}{%
-Nếu tiêu chí bắt buộc là \textbf{không mất request}, cấu hình sau tối ưu đã phục vụ
+Nếu tiêu chí bắt buộc là \textbf{không mất request}, cấu hình cuối cùng đã phục vụ
 được \textbf{50 người dùng đồng thời} với tỉ lệ thành công 100\%. Nếu tiêu chí bao
-gồm cả \textbf{p95 dưới 10 giây}, sức chứa vẫn chỉ ở mức \textbf{5--10 người dùng
-đồng thời}, và muốn nâng lên thì phải xử lý nút thắt suy luận theo các khuyến nghị
-ở Mục~\ref{sec:khuyennghi}.}
+gồm cả \textbf{p95 dưới 10 giây}, sức chứa chỉ ở mức \textbf{8--12 người dùng đồng
+thời} (trước tối ưu là 5--10), và muốn nâng lên thì bắt buộc phải đầu tư vào tầng
+suy luận theo các khuyến nghị ở Mục~\ref{sec:khuyennghi}.}
 
 % ======================= GIOI HAN =======================
 \section{Giới hạn của kiểm thử}
@@ -730,10 +850,11 @@ Kết quả trong báo cáo cần được diễn giải trong phạm vi các gi
 \fcolorbox{vnptblue}{lightblue}{\parbox{0.92\textwidth}{\centering
 \textbf{Sau tối ưu, hệ thống phục vụ được 50 người dùng đồng thời không mất
 request, nhưng độ trễ vẫn bị chặn bởi phần cứng.}\\[3pt]
-Đợt tối ưu tầng ứng dụng đưa tỉ lệ lỗi từ 13\% về \textbf{0\%}, nâng thông lượng
-từ 0,70 lên \textbf{1,10 request/giây} ($+57\%$) và giảm p95 từ 139 giây xuống
-\textbf{55,7 giây} ($-60\%$) --- toàn bộ trên cùng phần cứng, không phát sinh chi
-phí. Tuy nhiên p95 vẫn vượt xa ngưỡng SLA 10 giây.}}
+Tối ưu mã nguồn cộng với việc đặt \texttt{OLLAMA\_NUM\_PARALLEL}=4 đưa tỉ lệ lỗi
+từ 13\% về \textbf{0\%}, nâng thông lượng từ 0,70 lên \textbf{2,07 request/giây}
+($+196\%$) và giảm p95 từ 139 giây xuống \textbf{47,0 giây} ($-66\%$) --- toàn bộ
+trên cùng phần cứng, không phát sinh chi phí. Tuy nhiên p95 vẫn vượt xa ngưỡng SLA
+10 giây.}}
 \end{center}
 
 Bài học rút ra: kết luận ban đầu quy toàn bộ nút thắt cho mô hình ngôn ngữ là chưa
@@ -742,10 +863,17 @@ dụng --- cụ thể là việc gọi thư viện đồng bộ trong vòng lặ
 việc không dùng connection pool. Đây là những lỗi sửa được bằng mã nguồn với chi
 phí bằng không, và nên được rà soát trước khi kết luận về nhu cầu phần cứng.
 
-Sau khi lớp này được gỡ bỏ, nút thắt còn lại là năng lực suy luận thật sự
-($\approx 18$ token/giây trên CPU). Để phục vụ nhiều người dùng hơn với độ trễ
-chấp nhận được, bắt buộc phải đầu tư vào tầng suy luận theo các khuyến nghị dưới
-đây.
+Sau khi lớp này được gỡ bỏ, nút thắt còn lại là năng lực suy luận thật sự. Một
+phần của nút thắt này cũng chỉ là cấu hình: \texttt{OLLAMA\_NUM\_PARALLEL} để mặc
+định bằng 1 khiến máy chủ mô hình xử lý tuần tự, và nâng lên 4 làm thông lượng
+tăng gần gấp đôi. Nhưng ba phương án còn lại không tốn chi phí --- GPU tích hợp,
+\texttt{NUM\_PARALLEL}=8 và mô hình 1B --- đều đã thử và đều cho kết quả xấu hơn
+(Mục~\ref{sec:thunghiem}).
+
+Vì vậy khoảng cách còn lại tới ngưỡng p95 dưới 10 giây (cần gấp $\approx 5$ lần
+năng lực suy luận ở mức 50 người dùng) \textbf{không thể lấp bằng cấu hình hay mã
+nguồn}. Để phục vụ nhiều người dùng hơn với độ trễ chấp nhận được, bắt buộc phải
+đầu tư vào tầng suy luận theo các khuyến nghị dưới đây.
 
 % ======================= 6. KHUYEN NGHI =======================
 \section{Khuyến nghị cải thiện}
@@ -769,10 +897,37 @@ Tỉ lệ lỗi $13\% \to 0\%$; thông lượng $+57\%$\\
 Truy vấn chạm CSDL: $\approx 4$ giây $\to$ $\approx 0{,}1$ giây\\
 \textcolor{successgreen}{Hoàn thành} & Giới hạn \texttt{statement\_timeout} 20 giây và \texttt{num\_predict} 512 token &
 Chặn đuôi trễ: max $157 \to 61$ giây\\
+\textcolor{successgreen}{Hoàn thành} & Đặt \texttt{OLLAMA\_NUM\_PARALLEL}=4 thay cho mặc định 1 &
+Thông lượng $\times 1{,}9$; trung vị $-51\%$\\
 \bottomrule
 \end{longtable}
 
-\subsection{Còn lại --- tập trung vào tầng suy luận}
+\subsection{Đã thử và bị bác bỏ}
+
+Ba phương án dưới đây từng nằm trong danh mục khuyến nghị nhưng đã được thử nghiệm
+và \textbf{đo ra kết quả xấu hơn} (chi tiết ở Mục~\ref{sec:thunghiem}). Ghi lại
+tại đây để tránh lặp lại.
+
+\begin{longtable}{>{\bfseries}p{2.2cm}p{8.3cm}p{3.6cm}}
+\caption{Các phương án đã thử nghiệm và bị loại}\\
+\toprule
+Kết luận & Phương án & Kết quả đo\\
+\midrule
+\endfirsthead
+\toprule
+Kết luận & Phương án & Kết quả đo\\
+\midrule
+\endhead
+\textcolor{dangerred}{Loại} & Bật tăng tốc GPU tích hợp Radeon 780M (\texttt{OLLAMA\_IGPU\_ENABLE}) &
+Thông lượng $-47\%$; iGPU chia sẻ băng thông RAM với CPU\\
+\textcolor{dangerred}{Loại} & Nâng \texttt{OLLAMA\_NUM\_PARALLEL} lên 8 &
+p95 vọt lên 121,63 giây; 4 là điểm tối ưu\\
+\textcolor{dangerred}{Loại} & Đổi sang mô hình nhỏ hơn \texttt{llama3.2:1b} &
+Mỗi lượt gọi 23--27 giây thay vì 2--4 giây\\
+\bottomrule
+\end{longtable}
+
+\subsection{Còn lại --- cần đầu tư}
 
 \begin{longtable}{>{\bfseries}p{1.9cm}p{8.6cm}p{3.6cm}}
 \caption{Các khuyến nghị nâng cao khả năng chịu tải}\\
@@ -784,14 +939,14 @@ Chặn đuôi trễ: max $157 \to 61$ giây\\
 Ưu tiên & Giải pháp & Kỳ vọng\\
 \midrule
 \endhead
-\textcolor{dangerred}{Cao} & Trang bị GPU rời cho máy chủ suy luận, hoặc bật tăng tốc ROCm cho Radeon 780M &
-Tốc độ sinh token nhanh 10--20 lần --- đòn bẩy lớn nhất\\
+\textcolor{dangerred}{Cao} & Trang bị GPU rời cho máy chủ suy luận &
+Tốc độ sinh token nhanh 10--20 lần --- đòn bẩy duy nhất đủ lớn để đạt p95 dưới 10 giây\\
 \textcolor{dangerred}{Cao} & Hoặc chuyển sang API LLM đám mây (Anthropic/OpenAI) cho tải cao &
 Bỏ hoàn toàn trần CPU cục bộ; đổi lại phát sinh chi phí theo token\\
-\textcolor{warnorange}{Trung bình} & Dùng mô hình nhỏ hơn cho nhánh sinh SQL (\texttt{llama3.2:1b} hoặc tương đương) &
-Sinh nhanh $\approx 2$--$3$ lần, cần đánh giá lại độ chính xác\\
 \textcolor{warnorange}{Trung bình} & Cache câu hỏi và câu lệnh SQL lặp lại &
-Giảm số lần gọi mô hình\\
+Giảm số lần gọi mô hình. \textbf{Lưu ý:} bộ câu hỏi kiểm thử chỉ có 6 câu lặp lại
+nên cache sẽ cho tỉ lệ trúng gần 100\% và kết quả đo sẽ không phản ánh tải thật;
+cần đánh giá lại bằng bộ câu hỏi đa dạng hơn\\
 \textcolor{warnorange}{Trung bình} & Chạy Uvicorn nhiều worker (\texttt{-{}-workers 4}) hoặc đặt sau Gunicorn &
 Tận dụng đa nhân cho tầng ứng dụng (lợi ích hạn chế khi CPU đã bị suy luận chiếm)\\
 \textcolor{successgreen}{Thấp} & Thêm hàng đợi và thông báo ``đang xử lý'' cho người dùng &
@@ -842,9 +997,12 @@ export default function () {
 \end{lstlisting}
 
 \noindent Mã nguồn đầy đủ và số liệu thô có trong thư mục \texttt{loadtest/} của
-kho mã: \texttt{ai\_load\_test.js}, \texttt{ai\_load\_test\_50.js},
-\texttt{k6\_summary.json}, \texttt{k6\_summary\_50.json} (trước tối ưu) và
-\texttt{k6\_summary\_50\_optimized.json} (sau tối ưu).
+kho mã: kịch bản \texttt{ai\_load\_test.js} (30 user) và
+\texttt{ai\_load\_test\_50.js} (50 user); kết quả \texttt{k6\_summary.json} và
+\texttt{k6\_summary\_50.json} (hiện trạng ban đầu),
+\texttt{k6\_summary\_50\_optimized.json} (sau tối ưu mã nguồn),
+\texttt{k6\_30\_np4.json} và \texttt{k6\_50\_np4.json} (cấu hình cuối cùng),
+\texttt{k6\_50\_gpu.json} và \texttt{k6\_50\_np8.json} (hai phương án bị loại).
 
 \vspace{0.3cm}
 \noindent Các thay đổi mã nguồn của đợt tối ưu nằm ở:
