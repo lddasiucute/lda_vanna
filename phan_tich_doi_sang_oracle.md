@@ -12,7 +12,12 @@ bằng mã nguồn hiện có thì hệ thống sẽ **chậm đi**, không nhan
 
 **Nếu lý do là yêu cầu nghiệp vụ** (dữ liệu nằm sẵn trên Oracle, hoặc quy định
 bắt buộc dùng Oracle): làm được, nhưng phải sửa ba nhóm việc trước, ước tính
-2–3 ngày công. Chi tiết ở Mục 4.
+2–3 ngày công. Chi tiết ở Mục 4. Nhóm việc thứ nhất (tầng đấu nối) **đã làm
+xong**; hai nhóm còn lại — phương ngữ SQL và kiểm chứng thật — vẫn còn nguyên.
+
+**Trạng thái kiểm chứng:** mọi con số về Oracle trong văn bản này là suy luận
+từ mã nguồn, **chưa đấu nối máy chủ Oracle thật lần nào** vì chưa có instance.
+Bộ kiểm chứng đã dựng sẵn, chạy được ngay khi có DSN — xem Mục 4.3.
 
 ---
 
@@ -68,11 +73,16 @@ tra cứu đơn giản không cần suy luận — khi đó phần lớn request
 
 ---
 
-## 3. Đổi ngay bằng mã nguồn hiện có sẽ làm hệ thống chậm đi
+## 3. Mã nguồn Oracle từng mắc lại đúng hai lỗi đã sửa ở Postgres
 
 Đây là điểm quan trọng nhất của văn bản này.
 
-Lớp `OracleRunner` trong `src/vanna/integrations/oracle/sql_runner.py` đang mắc
+> **Cập nhật:** hai lỗi mô tả dưới đây **đã được sửa** sau khi tài liệu này ra
+> bản đầu — `OracleRunner` nay đã port đúng khuôn `PostgresRunner`. Phần mô tả
+> giữ nguyên vì nó là căn cứ cho khuyến nghị ở Mục 4, và vì kết quả sửa vẫn
+> **chưa được kiểm chứng trên máy chủ Oracle thật** (xem Mục 4.3).
+
+Lớp `OracleRunner` trong `src/vanna/integrations/oracle/sql_runner.py` đã mắc
 **đúng hai lỗi** mà đợt tối ưu vừa rồi đã gỡ khỏi `PostgresRunner`:
 
 **Lỗi 1 — mở kết nối mới cho từng truy vấn.** Dòng 50 gọi
@@ -101,18 +111,23 @@ mất kiểm soát sẽ giữ kết nối vô thời hạn.
 
 ## 4. Nếu vẫn phải đổi vì nghiệp vụ — cần làm những gì
 
-### 4.1. Viết lại `OracleRunner` (khoảng 40 dòng, nửa ngày)
+### 4.1. Viết lại `OracleRunner` — ĐÃ LÀM
 
-Port đúng khuôn `PostgresRunner` hiện tại:
+Đã port đúng khuôn `PostgresRunner` hiện tại:
 
-- `oracledb.ConnectionPool` thay cho `connect()` mỗi lần, 4–16 kết nối;
-- đẩy truy vấn sang `ThreadPoolExecutor`, số luồng bằng số kết nối tối đa;
-- đặt timeout ở mức phiên;
-- chốt chặn `cursor.description is None` trước khi dựng DataFrame — hiện dòng 67
-  dùng `cursor.description` vô điều kiện, nên mọi câu lệnh không trả bảng
-  (`INSERT`, `ALTER SESSION`, gọi thủ tục) sẽ ném `TypeError` thay vì trả về
-  DataFrame rỗng; `PostgresRunner` đã có chốt chặn này;
-- loại kết nối lỗi khỏi pool thay vì trả lại.
+- `oracledb.create_pool()` tạo một lần, dùng lại, thay cho `connect()` mỗi truy
+  vấn; mặc định 1–10 kết nối, mở lười ở lần dùng đầu và có khoá cho đa luồng;
+- đẩy truy vấn sang `ThreadPoolExecutor`, số luồng bằng số kết nối tối đa, nên
+  `acquire()` không bao giờ bị bỏ đói;
+- thiết lập mức phiên gom vào `session_callback` — chỉ chạy một lần cho mỗi kết
+  nối mới, không phải mỗi truy vấn: `autocommit`, `call_timeout`,
+  `current_schema`;
+- `call_timeout` thay cho `statement_timeout` — Oracle không có timeout phía
+  máy chủ tương đương, nên phải cắt ở phía client;
+- chốt chặn `cursor.description is None` trước khi dựng DataFrame — bản cũ dùng
+  `cursor.description` vô điều kiện, nên mọi câu lệnh không trả bảng (`INSERT`,
+  `ALTER SESSION`, khối PL/SQL) sẽ ném `TypeError` thay vì trả về DataFrame;
+- `pool.drop()` để loại kết nối lỗi khỏi pool thay vì `release()` trả lại.
 
 ### 4.2. Sửa phương ngữ SQL — đây mới là phần tốn công
 
@@ -130,12 +145,45 @@ sang Oracle nghĩa là phải viết lại phần chỉ thị này và **kiểm 
 sinh SQL** — đây là rủi ro lớn hơn nhiều so với phần hạ tầng, vì mô hình
 `llama3.2` 3B vốn đã tuân thủ chỉ thị ở mức vừa phải.
 
-### 4.3. Đo lại
+### 4.3. Đo lại — CHỜ INSTANCE ORACLE
 
-Không có cách nào kiểm chứng hai mục trên nếu chưa có một instance Oracle để
-đấu nối. Sau khi có, cần chạy lại bộ kiểm thử tải hiện có (`loadtest/`) để xác
-nhận không hồi quy — bộ kiểm thử đã được siết để bắt buộc kiểm tra dữ liệu trả
-về, nên sẽ phát hiện được lỗi kiểu "trả lời rỗng nhưng vẫn báo thành công".
+Đây là phần **chưa làm được**, và cần nói thẳng: mọi khẳng định ở Mục 3 và 4.1
+hiện vẫn là suy luận từ mã nguồn, **chưa có số liệu đấu nối thật nào chống
+lưng**. Máy kiểm thử không có Docker, không có service Oracle nào, cổng 1521
+đóng; chỉ có thư viện `oracledb` 4.0.2 (chế độ thin, không cần Oracle Client).
+
+Bộ kiểm chứng đã dựng sẵn tại `loadtest/kiem_chung_oracle.py`. Khi có DSN, chạy:
+
+```
+set ORACLE_USER=...
+set ORACLE_PASSWORD=...
+set ORACLE_DSN=host:1521/service
+set ORACLE_SCHEMA=qlsp_backup
+python loadtest/kiem_chung_oracle.py
+```
+
+Nó chạy 7 phép thử và tự sinh `loadtest/bao_cao_dau_noi_oracle.md`:
+
+| # | Phép thử | Kiểm chứng khẳng định nào |
+|---|---|---|
+| 1 | Đấu nối và phiên bản máy chủ | đấu nối được, ghi lại phiên bản để đưa vào báo cáo |
+| 2 | Độ trễ trước và sau khi pool ấm | Mục 2 — đối chứng với 0,105 giây của Neon |
+| 3 | Không chặn vòng lặp sự kiện | Mục 3, Lỗi 2 — đo độ trễ nhịp tim khi có truy vấn chậm |
+| 4 | Truy vấn song song thật sự | Mục 3, Lỗi 1 — 8 truy vấn đồng thời phải mất ~1 lần, không phải 8 lần |
+| 5 | Phương ngữ SQL | toàn bộ bảng ở Mục 4.2, từng dòng một |
+| 6 | Câu lệnh không trả về bảng | chốt chặn `cursor.description is None` ở Mục 4.1 |
+| 7 | Cắt truy vấn quá hạn | `call_timeout` thay `statement_timeout` |
+
+Bộ kiểm chứng chỉ đọc — không tạo, sửa hay xoá đối tượng nào trong cơ sở dữ liệu.
+
+Phép thử số 3 đã được kiểm chứng ngược để chắc nó không phải phép thử luôn báo
+đạt: chạy trên hàm giả lập, kiểu gọi thẳng của bản cũ cho độ trễ vòng lặp
+**1.990 ms**, kiểu `run_in_executor` của bản mới cho **6,6 ms** — ngưỡng 200 ms
+nằm gọn giữa hai giá trị.
+
+Sau khi 7 phép thử trên đạt, mới đến bước chạy lại bộ kiểm thử tải (`loadtest/`)
+để xác nhận không hồi quy — bộ kiểm thử đã được siết để bắt buộc kiểm tra dữ
+liệu trả về, nên sẽ phát hiện được lỗi kiểu "trả lời rỗng nhưng vẫn báo thành công".
 
 ---
 
