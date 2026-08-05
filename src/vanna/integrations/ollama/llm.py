@@ -8,8 +8,10 @@ of text content. Tool calling support depends on the Ollama model being used.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import threading
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from vanna.core.llm import (
@@ -66,9 +68,10 @@ class OllamaLlmService(LlmService):
         """Send a non-streaming request to Ollama and return the response."""
         payload = self._build_payload(request)
 
-        # Call the Ollama API
+        # Call the Ollama API on a worker thread; the client is blocking and
+        # would otherwise stall every other request sharing the event loop.
         try:
-            resp = self._client.chat(**payload)
+            resp = await asyncio.to_thread(lambda: self._client.chat(**payload))
         except Exception as e:
             raise RuntimeError(f"Ollama request failed: {str(e)}") from e
 
@@ -105,17 +108,40 @@ class OllamaLlmService(LlmService):
         """
         payload = self._build_payload(request)
 
-        # Ollama streaming
-        try:
-            stream = self._client.chat(**payload, stream=True)
-        except Exception as e:
-            raise RuntimeError(f"Ollama streaming request failed: {str(e)}") from e
+        # The Ollama client is synchronous: pull the stream on a worker thread and
+        # hand chunks to the event loop through a queue, so other in-flight
+        # conversations keep streaming while this one generates tokens.
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        done = object()
+
+        def pump() -> None:
+            try:
+                for raw_chunk in self._client.chat(**payload, stream=True):
+                    loop.call_soon_threadsafe(queue.put_nowait, raw_chunk)
+            except Exception as exc:  # surfaced to the consumer below
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            finally:
+                loop.call_soon_threadsafe(queue.put_nowait, done)
+
+        pump_thread = threading.Thread(
+            target=pump, name="ollama-stream", daemon=True
+        )
+        pump_thread.start()
 
         # Accumulate tool calls if present
         accumulated_tool_calls: List[ToolCall] = []
         last_finish: Optional[str] = None
 
-        for chunk in stream:
+        while True:
+            chunk = await queue.get()
+            if chunk is done:
+                break
+            if isinstance(chunk, BaseException):
+                raise RuntimeError(
+                    f"Ollama streaming request failed: {str(chunk)}"
+                ) from chunk
+
             message = chunk.get("message", {})
 
             # Yield text content

@@ -1151,6 +1151,12 @@ llm = ChartAwareOllamaLlmService(
     model=os.getenv("OLLAMA_MODEL", "llama3.2"),
     host=os.getenv("OLLAMA_HOST", "http://localhost:11434"),
     temperature=0.0,
+    # The system prompt plus one tool result stays well under 4k tokens; a smaller
+    # context lets Ollama keep more parallel slots loaded at the same VRAM budget.
+    num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "4096")),
+    # Generation runs on CPU here (~18 tok/s), so an answer that never stops is
+    # what produces the worst tail latency under load.
+    num_predict=int(os.getenv("OLLAMA_NUM_PREDICT", "512")),
 )
 
 RESULTS_PATH.mkdir(exist_ok=True)
@@ -1160,7 +1166,14 @@ latest_result_files: dict[tuple[str, str], str] = {}
 tools = ToolRegistry()
 tools.register_local_tool(
     TrackingRunSqlTool(
-        sql_runner=PostgresRunner(connection_string=DATABASE_URL),
+        sql_runner=PostgresRunner(
+            connection_string=DATABASE_URL,
+            # Reuse warm connections: a fresh TLS handshake to Neon costs more
+            # than the analytical queries themselves.
+            min_connections=int(os.getenv("DB_POOL_MIN", "4")),
+            max_connections=int(os.getenv("DB_POOL_MAX", "16")),
+            statement_timeout_ms=int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "20000")),
+        ),
         file_system=file_system,
         latest_files=latest_result_files,
     ),

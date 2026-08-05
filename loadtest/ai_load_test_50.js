@@ -72,7 +72,7 @@ export default function () {
 export function handleSummary(data) {
   return {
     stdout: textSummary(data),
-    'C:\\Users\\ADMIN\\AppData\\Local\\Temp\\claude\\C--Users-ADMIN-OneDrive---Hanoi-University-of-Science-and-Technology-Desktop-python-workspace-vanna\\8bec363e-78d1-4c0d-bca2-6da6160f0562\\scratchpad\\k6_summary_50.json': JSON.stringify(data, null, 2),
+    [__ENV.SUMMARY_OUT || 'k6_summary_50.json']: JSON.stringify(data, null, 2),
   };
 }
 
