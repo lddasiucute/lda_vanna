@@ -251,8 +251,14 @@ mức 50 người dùng cho kết quả: tỉ lệ thành công \ok{100\%} (từ
 đó chứa các con số ``sau tối ưu'' thu thập bằng một quy trình có ba sai sót
 nghiêm trọng --- trong đó có việc \textbf{toàn bộ truy vấn cơ sở dữ liệu đã hỏng
 trong suốt đợt đo mà bộ kiểm thử không phát hiện được}. Toàn bộ số liệu trong bản
-này là kết quả \textbf{đo lại} sau khi khắc phục cả ba. Chi tiết ở
-Mục~\ref{sec:dinhchinh}; đây cũng là bài học đáng lưu ý nhất của đợt kiểm thử.
+này là kết quả \textbf{đo lại} sau khi khắc phục cả ba (11 lượt đo, 7.400
+request). Chi tiết ở Mục~\ref{sec:dinhchinh}; đây cũng là bài học đáng lưu ý nhất
+của đợt kiểm thử.
+
+\noindent\textbf{Một khuyến nghị bị đảo chiều.} Việc đo lại cho thấy bật GPU tích
+hợp Radeon 780M \textbf{tăng 93\% thông lượng} ở mức 30 người dùng, chứ không
+giảm 47\% như bản trước kết luận. Đây là phương án không tốn chi phí và nên được
+áp dụng, với điều kiện về dung lượng RAM nêu ở Mục~\ref{sec:igpu1b}.
 
 \methodbox{Kết luận nhanh}{%
 Đợt tối ưu tầng ứng dụng đã \textbf{loại bỏ hoàn toàn lỗi} ở mức 50 người dùng và
@@ -824,13 +830,13 @@ xác định xem có thể gỡ tiếp nút thắt mà không cần đầu tư p
 thử nghiệm dùng chung kịch bản, bộ câu hỏi và mã nguồn đã tối ưu; chỉ khác cấu
 hình Ollama hoặc mô hình.
 
-Ba giá trị \texttt{NUM\_PARALLEL} đã được \textbf{đo lại đầy đủ} ở cả hai mức tải
-bằng quy trình đã sửa ở Mục~\ref{sec:dinhchinh} --- sáu lượt đo, mỗi lượt khởi
-động lại máy chủ mô hình và dọn sạch tiến trình cũ. Hai phương án còn lại (GPU
-tích hợp và mô hình 1B) chưa được đo lại; trạng thái của chúng ghi ở
-Mục~\ref{sec:khuyennghi}.
+Toàn bộ năm phương án đã được \textbf{đo lại đầy đủ} ở cả hai mức tải bằng quy
+trình đã sửa ở Mục~\ref{sec:dinhchinh} --- ba giá trị \texttt{NUM\_PARALLEL}
+(Mục~\ref{sec:np}), GPU tích hợp và mô hình 1B (Mục~\ref{sec:igpu1b}). Mười một
+lượt đo, mỗi lượt khởi động lại máy chủ mô hình và dọn sạch tiến trình cũ.
 
 \subsection{Số lượng luồng suy luận song song}
+\label{sec:np}
 
 Rà soát nhật ký Ollama phát hiện tham số mặc định trên máy kiểm thử là
 \texttt{OLLAMA\_NUM\_PARALLEL:1} --- nghĩa là máy chủ mô hình chỉ xử lý
@@ -890,25 +896,78 @@ gọi mô hình dồn vào hàng đợi cũng ít đi --- p95 của nhánh LLM v
 lại}. Chỉ số phản ánh đúng thực tế ở đây là thông lượng: $6{,}06 \to 4{,}19$
 req/giây, tức \textbf{mất 31\%} năng lực.
 
-\subsection{Các phương án bị bác bỏ}
+\subsection{GPU tích hợp và mô hình 1B}
+\label{sec:igpu1b}
 
-\begin{itemize}
-  \item \textbf{Tăng \texttt{NUM\_PARALLEL} lên 8} --- \emph{đã đo lại, bác bỏ}.
-  Bộ nhớ mô hình phình từ 3.864 MB lên 5.658 MB. Thông lượng giảm 34\% ở mức 30
-  người dùng và 31\% ở mức 50 người dùng. Cơ chế là \textbf{áp lực bộ nhớ}, không
-  phải tranh chấp nhân CPU như bản báo cáo trước nhận định --- xem lập luận ở mục
-  trên. Giá trị 4 là điểm tối ưu trên phần cứng này.
-  \item \textbf{Dùng GPU tích hợp (Radeon 780M)} --- \emph{chưa đo lại}. Đợt trước
-  ghi nhận thông lượng giảm 47\% so với CPU, với giải thích rằng iGPU dùng chung
-  băng thông bộ nhớ hệ thống với CPU. Kết luận này thu được bằng quy trình đo có
-  ba sai sót ở Mục~\ref{sec:dinhchinh} nên \textbf{chưa đủ căn cứ}; cần đo lại
-  trước khi dùng để ra quyết định.
-  \item \textbf{Đổi sang mô hình nhỏ hơn (\texttt{llama3.2:1b})} --- \emph{chưa đo
-  lại}. Đợt trước ghi nhận mỗi lượt gọi mô hình mất 23--27 giây thay vì 2--4 giây
-  của bản 3B, do mô hình 1B tuân thủ chỉ thị kém nên sinh dài dòng và lặp vòng gọi
-  công cụ. Quan sát này hợp lý về mặt cơ chế nhưng cũng thu được bằng quy trình đo
-  cũ, nên cần đo lại để khẳng định.
-\end{itemize}
+Hai phương án còn lại cũng đã được đo lại đầy đủ bằng quy trình đã sửa. Kết quả
+ở Bảng~\ref{tab:igpu1b}: một phương án \textbf{đảo ngược} kết luận cũ, một phương
+án xác nhận kết luận cũ nhưng với cơ chế khác.
+
+\begin{table}[H]
+\centering
+\caption{GPU tích hợp và mô hình 1B, đo lại trên mã nguồn đã sửa
+(\texttt{NP}=4)}
+\label{tab:igpu1b}
+\begin{tabularx}{\textwidth}{>{\bfseries}Xccccc}
+\toprule
+\rowcolor{lightblue}
+Cấu hình & Request & RPS & Trung vị & p95 & p95 câu gọi LLM\\
+\midrule
+\multicolumn{6}{l}{\itshape Mức 30 người dùng}\\
+\texttt{llama3.2} 3B, CPU & 1.077 & 4,61 & 0,16 & 27,26 & 29,64\\
+\rowcolor{lightblue!60}
+\textbf{\texttt{llama3.2} 3B, iGPU} & \ok{1.993} & \ok{8,91} & 0,12 & \ok{16,06} & \ok{17,19}\\
+\texttt{llama3.2:1b}, CPU & \bad{384} & \bad{1,72} & \bad{8,23} & 28,73 & \bad{66,27}\\
+\midrule
+\multicolumn{6}{l}{\itshape Mức 50 người dùng}\\
+\texttt{llama3.2} 3B, CPU & \ok{1.140} & \ok{6,06} & 0,11 & 46,34 & 47,79\\
+\texttt{llama3.2} 3B, iGPU & \bad{292} & \bad{1,64} & \bad{27,17} & 37,59 & 51,96\\
+\texttt{llama3.2:1b}, CPU & \bad{318} & \bad{1,75} & \bad{23,97} & 35,78 & \bad{98,19}\\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.15cm}
+{\small Đơn vị thời gian: giây. Mọi lượt đều đạt 100\% có dữ liệu trả về. Dòng
+iGPU ở mức 50 người dùng là lượt đo lại độc lập (ollama vừa khởi động sạch,
+không có lượt 30 người dùng chạy trước); lượt đầu cho 1,92 req/giây, cùng chữ ký.}
+\end{table}
+
+\subsubsection*{GPU tích hợp: kết luận cũ bị đảo ngược ở mức 30 người dùng}
+
+Bật \texttt{OLLAMA\_IGPU\_ENABLE=1} đưa toàn bộ trọng số lên GPU
+(\texttt{/api/ps} báo \texttt{vram} $=3.774$ MB). Ở mức 30 người dùng, thông
+lượng \textbf{tăng 93\%} ($4{,}61 \to 8{,}91$ req/giây) và p95 của câu gọi mô
+hình \textbf{giảm 42\%} ($29{,}64 \to 17{,}19$ giây). Kết luận ``iGPU làm giảm
+47\% thông lượng'' của bản báo cáo trước \textbf{không đúng}; nó là sản phẩm của
+quy trình đo có sai sót.
+
+Ở mức 50 người dùng thì sụp đổ, nhưng \textbf{không phải vì GPU}. Chữ ký giống
+hệt trường hợp \texttt{NP}=8: năm câu chỉ chạm Postgres cũng lên trung vị $27$
+giây, và request nhanh nhất trong cả đợt cũng mất $3{,}3$ giây. Nguyên nhân đo
+được trực tiếp: trên APU, VRAM cắt thẳng từ RAM hệ thống và là vùng \emph{ghim},
+không tráo trang được. Sau khi nạp mô hình, bộ nhớ trống của máy còn $0{,}8$ GB
+--- máy tráo trang ngay từ request đầu tiên.
+
+Đây là giới hạn \textbf{dung lượng RAM của máy kiểm thử}, không phải giới hạn của
+GPU tích hợp. Trên máy nhiều RAM hơn, nhiều khả năng lợi ích đo được ở mức 30
+người dùng sẽ giữ nguyên ở mức cao hơn.
+
+\subsubsection*{Mô hình 1B: kết luận cũ đúng, cơ chế khác}
+
+Mô hình \texttt{llama3.2:1b} cho thông lượng thấp hơn bản 3B \textbf{63\%} ở mức
+30 người dùng và \textbf{71\%} ở mức 50 người dùng --- kết luận ``nhỏ hơn không
+đồng nghĩa với nhanh hơn'' được xác nhận.
+
+Nhưng cơ chế không phải ``mỗi lượt gọi mô hình mất 23--27 giây'' như bản trước
+mô tả. Trung vị của câu gọi mô hình gần như không đổi ($22{,}56$ giây so với
+$21{,}48$ giây của bản 3B ở mức 30 người dùng). Thứ đổ vỡ là phần còn lại: năm
+câu \emph{không hề gọi mô hình} tụt từ $0{,}16$ xuống $4{,}62$--$7{,}12$ giây,
+trong khi bộ nhớ vẫn còn $2{,}8$ GB nên không thể quy cho tráo trang.
+
+Nói cách khác, bản 1B không chậm ở từng lượt gọi --- nó \textbf{đốt nhiều CPU
+hơn hẳn} do sinh dài dòng và lặp vòng gọi công cụ, khiến toàn bộ tiến trình bị bỏ
+đói. Đuôi trễ nói rõ điều này: p95 của câu gọi mô hình là $66$ giây ở mức 30
+người dùng và $98$ giây ở mức 50, so với $30$ và $48$ giây của bản 3B.
 
 \subsection{Kết quả với cấu hình tốt nhất}
 
@@ -985,8 +1044,11 @@ nghiệm, và phần còn lại là tốc độ sinh token trên CPU.
 Từ mô hình hàng đợi trên, cấu hình cuối cùng đáp ứng ngưỡng 10 giây ở khoảng
 \textbf{8--10 người dùng đồng thời}. Cần nhấn mạnh rằng ràng buộc này chỉ áp lên
 $1/6$ lưu lượng: năm trong sáu câu hỏi giữ p95 dưới nửa giây ở mọi mức tải đã đo.
-Muốn phục vụ 30--50 người dùng \emph{với câu hỏi cần suy luận} trong ngưỡng này
-thì bắt buộc phải đầu tư GPU rời hoặc chuyển sang API LLM đám mây.}
+Bật GPU tích hợp làm năng lực nhánh suy luận tăng khoảng gấp đôi, đưa con số này
+lên \textbf{khoảng 16--20 người dùng} --- nhưng chỉ trong phạm vi bộ nhớ cho
+phép (Mục~\ref{sec:igpu1b}). Muốn phục vụ 30--50 người dùng \emph{với câu hỏi cần
+suy luận} trong ngưỡng này thì bắt buộc phải đầu tư GPU rời hoặc chuyển sang API
+LLM đám mây.}
 
 % ======================= TIEU CHI NGHIEM THU =======================
 \section{Đánh giá theo tiêu chí nghiệm thu (SLA)}
@@ -1057,13 +1119,14 @@ Kết quả trong báo cáo cần được diễn giải trong phạm vi các gi
   tỉ lệ câu hỏi cần suy luận cao hơn. Khi tỉ lệ này tăng, thông lượng sẽ giảm gần
   như tuyến tính --- trần hệ thống là $\mu/f$ với $\mu \approx 1$ req/giây và $f$
   là tỉ lệ câu cần suy luận.
-  \item \textbf{Hai phương án chưa được đo lại:} kết luận về GPU tích hợp và về mô
-  hình \texttt{llama3.2:1b} vẫn dựa trên số liệu thu bằng quy trình đo cũ
-  (Mục~\ref{sec:dinhchinh}), nên chưa đủ căn cứ.
-  \item \textbf{Áp lực bộ nhớ của chính máy đo:} máy có 13,8 GB RAM khả dụng nhưng
-  các ứng dụng nền chiếm sẵn khoảng 39 GB commit charge. Cấu hình
-  \texttt{NUM\_PARALLEL}=8 đẩy bộ nhớ trống xuống $0{,}8$ GB. Kết quả của cấu hình
-  này vì vậy phản ánh giới hạn bộ nhớ của máy đo nhiều hơn là đặc tính của tham số.
+  \item \textbf{Bộ nhớ của máy đo là ràng buộc chi phối:} máy có 13,8 GB RAM khả
+  dụng nhưng các ứng dụng nền chiếm sẵn 39--46 GB commit charge, và mức này
+  \emph{tăng dần trong ngày} (riêng OneDrive đi từ 23,6 lên 28,5 GB). Hai cấu
+  hình --- \texttt{NUM\_PARALLEL}=8 và GPU tích hợp --- đều đẩy bộ nhớ trống
+  xuống $0{,}8$ GB và đều sụp ở mức 50 người dùng. Kết quả của chúng ở mức tải
+  này \textbf{phản ánh dung lượng RAM của máy đo}, không phải đặc tính của tham
+  số hay của phần cứng đồ hoạ. Muốn kết luận dứt điểm cần đo lại trên máy nhiều
+  RAM hơn.
 \end{itemize}
 
 % ======================= 5. KET LUAN =======================
@@ -1094,6 +1157,11 @@ còn lại. Một phần của nút thắt này cũng chỉ là cấu hình:
 \texttt{OLLAMA\_NUM\_PARALLEL} để mặc định bằng 1 khiến máy chủ mô hình xử lý tuần
 tự, nâng lên 4 làm thông lượng tăng 37\%; nâng tiếp lên 8 thì \emph{giảm} 31\% do
 áp lực bộ nhớ (Mục~\ref{sec:thunghiem}).
+
+Một kết luận của bản báo cáo trước đã bị số liệu mới \textbf{đảo ngược}: bật GPU
+tích hợp Radeon 780M không làm giảm 47\% thông lượng như từng ghi nhận, mà
+\textbf{tăng 93\%} ở mức 30 người dùng. Phương án miễn phí này vì vậy quay lại
+danh mục khuyến nghị, kèm điều kiện về bộ nhớ (Mục~\ref{sec:igpu1b}).
 
 Vì vậy khoảng cách còn lại tới ngưỡng p95 dưới 10 giây (cần gấp $\approx 5$ lần
 năng lực suy luận ở mức 50 người dùng) \textbf{không thể lấp bằng cấu hình hay mã
@@ -1143,15 +1211,14 @@ Phát hiện được lỗi trả lời rỗng mà tiêu chí cũ bỏ sót\\
 \bottomrule
 \end{longtable}
 
-\subsection{Đã thử: một bị bác bỏ, hai cần đo lại}
+\subsection{Đã thử nghiệm: một nên áp dụng có điều kiện, hai bị bác bỏ}
 
-Ba phương án dưới đây từng nằm trong danh mục khuyến nghị. Một phương án đã được
-đo lại bằng quy trình đã sửa và bị bác bỏ dứt khoát; hai phương án còn lại
-\textbf{cần đo lại} vì kết luận cũ dựa trên số liệu không đủ tin cậy (chi tiết ở
-Mục~\ref{sec:dinhchinh} và Mục~\ref{sec:thunghiem}).
+Ba phương án dưới đây đều đã được đo lại đầy đủ bằng quy trình đã sửa. Một phương
+án cho kết quả \textbf{ngược hẳn} với kết luận của bản báo cáo trước (chi tiết ở
+Mục~\ref{sec:igpu1b}).
 
-\begin{longtable}{>{\bfseries}p{2.2cm}p{8.3cm}p{3.6cm}}
-\caption{Các phương án đã thử nghiệm và trạng thái hiện tại}\\
+\begin{longtable}{>{\bfseries}p{2.4cm}p{8.1cm}p{3.6cm}}
+\caption{Các phương án đã thử nghiệm và kết luận sau khi đo lại}\\
 \toprule
 Kết luận & Phương án & Kết quả đo\\
 \midrule
@@ -1160,12 +1227,13 @@ Kết luận & Phương án & Kết quả đo\\
 Kết luận & Phương án & Kết quả đo\\
 \midrule
 \endhead
+\textcolor{successgreen}{Nên áp dụng, có điều kiện} & Bật tăng tốc GPU tích hợp Radeon 780M
+(\texttt{OLLAMA\_IGPU\_ENABLE}) --- chỉ khi tải không vượt quá khả năng RAM &
+Thông lượng $+93\%$ ở mức 30 người dùng; nhưng sụp ở mức 50 do RAM còn 0,8 GB\\
 \textcolor{dangerred}{Loại} & Nâng \texttt{OLLAMA\_NUM\_PARALLEL} lên 8 &
 Thông lượng $-31\%$ ở mức 50 người dùng; nguyên nhân là áp lực bộ nhớ, 4 là điểm tối ưu\\
-\textcolor{warnorange}{Cần đo lại} & Bật tăng tốc GPU tích hợp Radeon 780M (\texttt{OLLAMA\_IGPU\_ENABLE}) &
-Số cũ: thông lượng $-47\%$ --- thu bằng quy trình đo có sai sót\\
-\textcolor{warnorange}{Cần đo lại} & Đổi sang mô hình nhỏ hơn \texttt{llama3.2:1b} &
-Số cũ: mỗi lượt gọi 23--27 giây --- thu bằng quy trình đo có sai sót\\
+\textcolor{dangerred}{Loại} & Đổi sang mô hình nhỏ hơn \texttt{llama3.2:1b} &
+Thông lượng $-63\%$ ở mức 30 người dùng; đốt CPU nhiều hơn do sinh dài dòng\\
 \bottomrule
 \end{longtable}
 
@@ -1256,8 +1324,9 @@ kho mã. Phần dùng chung của hai kịch bản nằm ở \texttt{chat\_probe
 
 \noindent Số liệu \textbf{hiện trạng ban đầu}: \texttt{k6\_summary.json},
 \texttt{k6\_summary\_50.json}. Số liệu \textbf{đo lại} trên mã nguồn đã sửa, đặt
-tên theo mẫu \texttt{k6\_\{mức tải\}\_np\{NP\}\_v2.json} --- sáu tệp cho ba giá
-trị \texttt{NUM\_PARALLEL} ở hai mức tải.
+tên theo mẫu \texttt{k6\_\{mức tải\}\_\{cấu hình\}\_v2.json}: sáu tệp
+\texttt{np1}, \texttt{np4}, \texttt{np8} cho ba giá trị \texttt{NUM\_PARALLEL},
+hai tệp \texttt{igpu} cho GPU tích hợp và hai tệp \texttt{1b} cho mô hình nhỏ.
 
 \noindent Các tệp \texttt{k6\_summary\_50\_optimized.json},
 \texttt{k6\_30\_np4.json}, \texttt{k6\_50\_np4.json}, \texttt{k6\_50\_np8.json} và
