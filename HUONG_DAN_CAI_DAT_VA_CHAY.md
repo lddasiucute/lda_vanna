@@ -38,6 +38,51 @@ ollama serve
 
 Giữ cửa sổ này mở và dùng một cửa sổ PowerShell khác cho Vanna.
 
+### 2.1. Cấu hình hiệu năng cho Ollama
+
+Hai biến môi trường dưới đây ảnh hưởng lớn tới thông lượng. Đặt một lần ở cấp
+người dùng:
+
+```powershell
+[Environment]::SetEnvironmentVariable('OLLAMA_NUM_PARALLEL','4','User')
+[Environment]::SetEnvironmentVariable('OLLAMA_IGPU_ENABLE','1','User')
+```
+
+Ollama đọc hai biến này **lúc khởi động tiến trình**, nên phải thoát hẳn Ollama
+(cả biểu tượng ở khay hệ thống) rồi mở lại thì mới có hiệu lực.
+
+- `OLLAMA_NUM_PARALLEL=4` — mặc định là 1, tức máy chủ mô hình xử lý tuần tự.
+  Đặt bằng 4 làm thông lượng tăng 37% ở mức 50 người dùng đồng thời. Không nên
+  đặt 8: trên máy 16 GB RAM, mô hình phình lên 5,7 GB và thông lượng *giảm* 31%.
+- `OLLAMA_IGPU_ENABLE=1` — đưa mô hình lên GPU tích hợp. Ở mức 30 người dùng
+  đồng thời, thông lượng tăng 93%.
+
+Kiểm tra đã có hiệu lực:
+
+```powershell
+ollama run llama3.2 "hi"
+(Invoke-RestMethod http://localhost:11434/api/ps).models |
+  Select-Object name, @{n='vram_MB';e={[int]($_.size_vram/1MB)}}
+```
+
+`vram_MB` lớn hơn 0 nghĩa là mô hình đang chạy trên GPU tích hợp.
+
+> **Lưu ý về bộ nhớ.** Trên chip AMD APU, VRAM cắt thẳng từ RAM hệ thống và là
+> vùng ghim, không tráo trang được. Trên máy 16 GB, nạp mô hình xong chỉ còn
+> khoảng 0,8 GB trống, và từ khoảng 50 người dùng đồng thời trở lên thì máy tráo
+> trang liên tục — lúc đó cả những truy vấn không dùng AI cũng chậm hàng chục
+> giây. Nếu cần phục vụ mức tải đó trên máy ít RAM, hãy tắt biến này.
+
+### 2.2. Dọn tiến trình `llama-server` khi đổi cấu hình
+
+Kết thúc `ollama.exe` **không** kết thúc tiến trình con `llama-server.exe` đang
+giữ trọng số mô hình. Tiến trình bị bỏ lại chiếm 4–6 GB commit charge và không
+lộ diện khi xem mức tiêu thụ RAM thông thường. Sau mỗi lần đổi cấu hình:
+
+```powershell
+Get-Process llama-server -ErrorAction SilentlyContinue | Stop-Process -Force
+```
+
 ## 3. Tạo dữ liệu trên Neon
 
 1. Tạo project trên Neon.

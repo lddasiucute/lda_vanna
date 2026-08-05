@@ -257,8 +257,9 @@ của đợt kiểm thử.
 
 \noindent\textbf{Một khuyến nghị bị đảo chiều.} Việc đo lại cho thấy bật GPU tích
 hợp Radeon 780M \textbf{tăng 93\% thông lượng} ở mức 30 người dùng, chứ không
-giảm 47\% như bản trước kết luận. Đây là phương án không tốn chi phí và nên được
-áp dụng, với điều kiện về dung lượng RAM nêu ở Mục~\ref{sec:igpu1b}.
+giảm 47\% như bản trước kết luận. Phương án không tốn chi phí này \textbf{đã được
+áp dụng} trên máy kiểm thử, kèm điều kiện về dung lượng RAM nêu ở
+Mục~\ref{sec:igpu1b}.
 
 \methodbox{Kết luận nhanh}{%
 Đợt tối ưu tầng ứng dụng đã \textbf{loại bỏ hoàn toàn lỗi} ở mức 50 người dùng và
@@ -952,6 +953,14 @@ không tráo trang được. Sau khi nạp mô hình, bộ nhớ trống của m
 GPU tích hợp. Trên máy nhiều RAM hơn, nhiều khả năng lợi ích đo được ở mức 30
 người dùng sẽ giữ nguyên ở mức cao hơn.
 
+\methodbox{Trạng thái áp dụng}{%
+Cấu hình \texttt{OLLAMA\_IGPU\_ENABLE}=1 \textbf{đã được bật} trên máy kiểm thử
+ở cấp biến môi trường người dùng; \texttt{/api/ps} xác nhận \texttt{vram} $=3.774$
+MB. Ở chế độ một người dùng, câu hỏi cần suy luận giảm từ $1{,}99$ xuống
+$1{,}54$--$1{,}62$ giây. Kèm theo là một điều kiện vận hành cần theo dõi: nếu tải
+thực tế tiến tới 50 người dùng đồng thời trên máy 16 GB, cấu hình này phải được
+tắt, vì khi đó ngay cả truy vấn không dùng AI cũng chậm hàng chục giây.}
+
 \subsubsection*{Mô hình 1B: kết luận cũ đúng, cơ chế khác}
 
 Mô hình \texttt{llama3.2:1b} cho thông lượng thấp hơn bản 3B \textbf{63\%} ở mức
@@ -1206,16 +1215,18 @@ Truy vấn \texttt{WITH ... SELECT} trả đúng dữ liệu thay vì số dòng
 Chặn đuôi trễ: max $157 \to 48{,}5$ giây\\
 \textcolor{successgreen}{Hoàn thành} & Đặt \texttt{OLLAMA\_NUM\_PARALLEL}=4 thay cho mặc định 1 &
 Thông lượng $+37\%$ ở mức 50 người dùng\\
+\textcolor{successgreen}{Hoàn thành} & Bật \texttt{OLLAMA\_IGPU\_ENABLE}=1 để đưa mô hình lên GPU tích hợp &
+Thông lượng $+93\%$ ở mức 30 người dùng; kèm điều kiện về RAM ở Mục~\ref{sec:igpu1b}\\
 \textcolor{successgreen}{Hoàn thành} & Siết tiêu chí thành công của k6: bắt buộc có sự kiện \texttt{dataframe}; tách độ trễ theo từng câu hỏi &
 Phát hiện được lỗi trả lời rỗng mà tiêu chí cũ bỏ sót\\
 \bottomrule
 \end{longtable}
 
-\subsection{Đã thử nghiệm: một nên áp dụng có điều kiện, hai bị bác bỏ}
+\subsection{Đã thử nghiệm: một đã áp dụng, hai bị bác bỏ}
 
 Ba phương án dưới đây đều đã được đo lại đầy đủ bằng quy trình đã sửa. Một phương
-án cho kết quả \textbf{ngược hẳn} với kết luận của bản báo cáo trước (chi tiết ở
-Mục~\ref{sec:igpu1b}).
+án cho kết quả \textbf{ngược hẳn} với kết luận của bản báo cáo trước và
+\textbf{đã được áp dụng} trên máy kiểm thử (chi tiết ở Mục~\ref{sec:igpu1b}).
 
 \begin{longtable}{>{\bfseries}p{2.4cm}p{8.1cm}p{3.6cm}}
 \caption{Các phương án đã thử nghiệm và kết luận sau khi đo lại}\\
@@ -1227,8 +1238,8 @@ Kết luận & Phương án & Kết quả đo\\
 Kết luận & Phương án & Kết quả đo\\
 \midrule
 \endhead
-\textcolor{successgreen}{Nên áp dụng, có điều kiện} & Bật tăng tốc GPU tích hợp Radeon 780M
-(\texttt{OLLAMA\_IGPU\_ENABLE}) --- chỉ khi tải không vượt quá khả năng RAM &
+\textcolor{successgreen}{Đã áp dụng} & Bật tăng tốc GPU tích hợp Radeon 780M
+(\texttt{OLLAMA\_IGPU\_ENABLE}=1) --- có điều kiện về RAM &
 Thông lượng $+93\%$ ở mức 30 người dùng; nhưng sụp ở mức 50 do RAM còn 0,8 GB\\
 \textcolor{dangerred}{Loại} & Nâng \texttt{OLLAMA\_NUM\_PARALLEL} lên 8 &
 Thông lượng $-31\%$ ở mức 50 người dùng; nguyên nhân là áp lực bộ nhớ, 4 là điểm tối ưu\\
