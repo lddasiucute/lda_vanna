@@ -88,6 +88,24 @@ class PostgresRunner(SqlRunner):
 
     # Internal helpers
 
+    def _connection_factory(self):
+        """Subclass the connection so per-connection setup runs once, at connect
+        time. psycopg2's C connection type accepts no extra attributes, so the
+        settings cannot be tracked on the object itself."""
+        statement_timeout_ms = self.statement_timeout_ms
+
+        class PreparedConnection(self.psycopg2.extensions.connection):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.autocommit = True
+                if statement_timeout_ms:
+                    with self.cursor() as cursor:
+                        cursor.execute(
+                            f"SET statement_timeout = {int(statement_timeout_ms)}"
+                        )
+
+        return PreparedConnection
+
     def _get_pool(self):
         """Create the connection pool on first use (thread-safe)."""
         if self._pool is None:
@@ -97,6 +115,7 @@ class PostgresRunner(SqlRunner):
                         kwargs: Dict[str, Any] = {"dsn": self.connection_string}
                     else:
                         kwargs = dict(self.connection_params or {})
+                    kwargs["connection_factory"] = self._connection_factory()
                     self._pool = self.psycopg2.pool.ThreadedConnectionPool(
                         self.min_connections, self.max_connections, **kwargs
                     )
@@ -113,37 +132,26 @@ class PostgresRunner(SqlRunner):
                     )
         return self._executor
 
-    def _prepare_connection(self, conn) -> None:
-        """Apply per-connection settings once, right after it is opened."""
-        if getattr(conn, "_vanna_prepared", False):
-            return
-        conn.autocommit = True
-        if self.statement_timeout_ms:
-            with conn.cursor() as cursor:
-                cursor.execute(f"SET statement_timeout = {int(self.statement_timeout_ms)}")
-        conn._vanna_prepared = True
-
     def _execute(self, sql: str) -> pd.DataFrame:
         """Run one statement on a pooled connection. Called from a worker thread."""
         pool = self._get_pool()
         conn = pool.getconn()
         discard = False
         try:
-            self._prepare_connection(conn)
             with conn.cursor(cursor_factory=self.psycopg2.extras.RealDictCursor) as cursor:
                 cursor.execute(sql)
 
-                # Determine if this is a SELECT query or modification query
-                query_type = sql.strip().upper().split()[0]
+                # cursor.description tells us whether the server sent back a
+                # result set. Reading it off the cursor also covers WITH, SHOW,
+                # EXPLAIN and INSERT ... RETURNING, which sniffing the first
+                # keyword of the statement would get wrong.
+                if cursor.description is None:
+                    return pd.DataFrame({"rows_affected": [cursor.rowcount]})
 
-                if query_type == "SELECT":
-                    rows = cursor.fetchall()
-                    if not rows:
-                        return pd.DataFrame()
-                    return pd.DataFrame([dict(row) for row in rows])
-
-                # For non-SELECT queries (INSERT, UPDATE, DELETE, etc.)
-                return pd.DataFrame({"rows_affected": [cursor.rowcount]})
+                rows = cursor.fetchall()
+                if not rows:
+                    return pd.DataFrame(columns=[col.name for col in cursor.description])
+                return pd.DataFrame([dict(row) for row in rows])
         except Exception:
             # A connection left in a bad state must not go back into the pool.
             discard = True
