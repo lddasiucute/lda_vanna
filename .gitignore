@@ -40,3 +40,10 @@ frontends/**/static/
 frontends/**/.storybook-static/
 frontends/**/package-lock.json
 frontends/**/.mypy_cache/
+
+# LaTeX build artifacts
+*.aux
+*.toc
+*.out
+*.synctex.gz
+loadtest/*.log
