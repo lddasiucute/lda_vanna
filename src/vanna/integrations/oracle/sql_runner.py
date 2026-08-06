@@ -1,6 +1,7 @@
 """Oracle implementation of SqlRunner interface."""
 
 import asyncio
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
@@ -9,6 +10,15 @@ import pandas as pd
 
 from vanna.capabilities.sql_runner import SqlRunner, RunSqlToolArgs
 from vanna.core.tool import ToolContext
+
+# A PL/SQL block ends with `END;` and the semicolon is part of the syntax.
+# Plain SQL, by contrast, must not carry a trailing semicolon over the wire.
+_PLSQL_START = re.compile(
+    r"^\s*(DECLARE|BEGIN"
+    r"|CREATE\s+(OR\s+REPLACE\s+)?"
+    r"(PROCEDURE|FUNCTION|PACKAGE|TRIGGER|TYPE))\b",
+    re.IGNORECASE,
+)
 
 
 class OracleRunner(SqlRunner):
@@ -112,9 +122,11 @@ class OracleRunner(SqlRunner):
 
     def _execute(self, sql: str) -> pd.DataFrame:
         """Run one statement on a pooled connection. Called from a worker thread."""
-        # Oracle rejects the trailing semicolon that a client would send.
+        # Oracle rejects the trailing semicolon that a client would send, but
+        # stripping it from a PL/SQL block truncates its closing END; and the
+        # server answers PLS-00103. Only plain SQL gets the semicolon removed.
         sql = sql.rstrip()
-        if sql.endswith(";"):
+        if sql.endswith(";") and not _PLSQL_START.match(sql):
             sql = sql[:-1]
 
         pool = self._get_pool()

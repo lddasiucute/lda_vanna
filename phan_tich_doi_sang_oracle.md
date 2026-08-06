@@ -15,9 +15,10 @@ bắt buộc dùng Oracle): làm được, nhưng phải sửa ba nhóm việc t
 2–3 ngày công. Chi tiết ở Mục 4. Nhóm việc thứ nhất (tầng đấu nối) **đã làm
 xong**; hai nhóm còn lại — phương ngữ SQL và kiểm chứng thật — vẫn còn nguyên.
 
-**Trạng thái kiểm chứng:** mọi con số về Oracle trong văn bản này là suy luận
-từ mã nguồn, **chưa đấu nối máy chủ Oracle thật lần nào** vì chưa có instance.
-Bộ kiểm chứng đã dựng sẵn, chạy được ngay khi có DSN — xem Mục 4.3.
+**Trạng thái kiểm chứng:** đã đấu nối máy chủ Oracle thật. Oracle AI Database
+26ai Free 23.26.2.0.0 được cài trên máy kiểm thử ngày 06/08/2026, bộ kiểm chứng
+chạy **7/7 phép thử đạt**. Mọi con số Oracle trong văn bản này giờ là số đo,
+không còn là suy luận — chi tiết ở Mục 4.3.
 
 ---
 
@@ -61,11 +62,21 @@ Cơ sở dữ liệu hiện đặt trên Neon, region `ap-southeast-1` (Singapor
 vấn phải đi trọn một vòng quốc tế, đo được **0,105 giây** khi connection pool đã
 ấm.
 
-Một instance Oracle đặt tại chỗ (on-prem) sẽ cắt phần lớn con số này, có thể
-xuống dưới 10 mili-giây. Đây là lợi ích thật, không phải suy đoán.
+Một instance Oracle đặt tại chỗ cắt gần hết con số này. **Đã đo được**, trên
+Oracle 26ai Free chạy cùng máy, pool đã ấm:
 
-Nhưng cần đặt đúng tỉ lệ: đó là tiết kiệm khoảng **0,1 giây trong một request
-mất 45 giây**. Người dùng sẽ không cảm nhận được.
+| Cấu hình | Trung vị | p95 |
+|---|---:|---:|
+| Postgres trên Neon, Singapore | 105 ms | — |
+| Oracle tại chỗ | **0,5 ms** | 0,8 ms |
+
+Nhanh hơn khoảng **200 lần**. Đây là lợi ích thật, và lớn hơn cả ước lượng
+dưới 10 mili-giây ban đầu.
+
+Nhưng cần đặt đúng tỉ lệ, và đây mới là điều quyết định: đó là tiết kiệm
+khoảng **0,105 giây trong một request mất 45 giây** — cải thiện 0,2%. Người
+dùng sẽ không cảm nhận được. Một tầng cơ sở dữ liệu nhanh hơn 200 lần vẫn
+không cứu được hệ thống, vì cơ sở dữ liệu chưa bao giờ là chỗ mất thời gian.
 
 Lợi ích này chỉ trở nên đáng kể nếu tập câu hỏi thực tế nghiêng hẳn về nhóm
 tra cứu đơn giản không cần suy luận — khi đó phần lớn request nằm trong khoảng
@@ -77,10 +88,15 @@ tra cứu đơn giản không cần suy luận — khi đó phần lớn request
 
 Đây là điểm quan trọng nhất của văn bản này.
 
-> **Cập nhật:** hai lỗi mô tả dưới đây **đã được sửa** sau khi tài liệu này ra
-> bản đầu — `OracleRunner` nay đã port đúng khuôn `PostgresRunner`. Phần mô tả
-> giữ nguyên vì nó là căn cứ cho khuyến nghị ở Mục 4, và vì kết quả sửa vẫn
-> **chưa được kiểm chứng trên máy chủ Oracle thật** (xem Mục 4.3).
+> **Cập nhật:** hai lỗi mô tả dưới đây **đã được sửa và đã kiểm chứng trên máy
+> chủ Oracle thật** — xem Mục 4.3. Phần mô tả giữ nguyên vì nó là căn cứ cho
+> khuyến nghị ở Mục 4.
+>
+> Việc chạy kiểm chứng còn moi ra **lỗi thứ ba** mà đọc mã nguồn không thấy:
+> hàm cắt dấu chấm phẩy cuối câu cắt luôn `END;` của khối PL/SQL, khiến mọi
+> khối PL/SQL trả về `PLS-00103`. Lỗi này có sẵn trong bản `OracleRunner` gốc
+> và đã được bê nguyên sang bản viết lại; chỉ khi đấu nối thật mới lộ ra. Nó
+> là lý do tự nó đủ để không tin vào phân tích tĩnh khi chưa đo.
 
 Lớp `OracleRunner` trong `src/vanna/integrations/oracle/sql_runner.py` đã mắc
 **đúng hai lỗi** mà đợt tối ưu vừa rồi đã gỡ khỏi `PostgresRunner`:
@@ -127,63 +143,66 @@ mất kiểm soát sẽ giữ kết nối vô thời hạn.
 - chốt chặn `cursor.description is None` trước khi dựng DataFrame — bản cũ dùng
   `cursor.description` vô điều kiện, nên mọi câu lệnh không trả bảng (`INSERT`,
   `ALTER SESSION`, khối PL/SQL) sẽ ném `TypeError` thay vì trả về DataFrame;
-- `pool.drop()` để loại kết nối lỗi khỏi pool thay vì `release()` trả lại.
+- `pool.drop()` để loại kết nối lỗi khỏi pool thay vì `release()` trả lại;
+- chỉ cắt dấu chấm phẩy cuối câu với SQL thường, **không cắt với khối PL/SQL** —
+  `END;` là cú pháp bắt buộc, cắt đi thì Oracle trả `PLS-00103`. Lỗi này chỉ
+  phát hiện được khi đấu nối thật.
 
 ### 4.2. Sửa phương ngữ SQL — đây mới là phần tốn công
 
-Mã nguồn và chỉ thị cho mô hình đang gắn chặt với PostgreSQL:
+Mã nguồn và chỉ thị cho mô hình đang gắn chặt với PostgreSQL. Bảng dưới đây
+**đã được kiểm chứng từng dòng** trên Oracle 26ai thật, không còn là suy đoán:
 
-| Vị trí | Vấn đề trên Oracle |
-|---|---|
-| `main.py` dòng 408, 424 | `LIMIT 10` — Oracle dùng `FETCH FIRST 10 ROWS ONLY` |
-| `main.py` dòng 1270 | Chỉ thị bảo mô hình truy vấn `information_schema.columns` — Oracle không có, phải đổi sang `ALL_TAB_COLUMNS` |
-| `main.py`, 21 vị trí | Tên bảng gắn tiền tố schema `qlsp_backup.` |
-| `main.py` dòng 1127–1145 | Hàm đặt `search_path` qua tham số khởi động — Oracle dùng `ALTER SESSION SET CURRENT_SCHEMA` |
+| Vị trí | Vấn đề trên Oracle | Kết quả đo |
+|---|---|---|
+| `main.py` dòng 408, 424 | `LIMIT 10` — Oracle dùng `FETCH FIRST 10 ROWS ONLY` | `LIMIT` trả `ORA-03047`; `FETCH FIRST` chạy được |
+| `main.py` dòng 1270 | Chỉ thị bảo mô hình truy vấn `information_schema.columns` — Oracle không có, phải đổi sang `ALL_TAB_COLUMNS` | `information_schema.columns` trả `ORA-00942`; `ALL_TAB_COLUMNS` chạy được |
+| `main.py`, 21 vị trí | Tên bảng gắn tiền tố schema `qlsp_backup.` | chưa đo — cần dữ liệu thật trên Oracle |
+| `main.py` dòng 1127–1145 | Hàm đặt `search_path` qua tham số khởi động — Oracle dùng `ALTER SESSION SET CURRENT_SCHEMA` | `ALTER SESSION SET CURRENT_SCHEMA` chạy được |
 
 Ngoài ra prompt hệ thống đang dạy mô hình sinh SQL theo cú pháp PostgreSQL. Đổi
 sang Oracle nghĩa là phải viết lại phần chỉ thị này và **kiểm thử lại chất lượng
 sinh SQL** — đây là rủi ro lớn hơn nhiều so với phần hạ tầng, vì mô hình
 `llama3.2` 3B vốn đã tuân thủ chỉ thị ở mức vừa phải.
 
-### 4.3. Đo lại — CHỜ INSTANCE ORACLE
+### 4.3. Đo lại — ĐÃ LÀM, 7/7 ĐẠT
 
-Đây là phần **chưa làm được**, và cần nói thẳng: mọi khẳng định ở Mục 3 và 4.1
-hiện vẫn là suy luận từ mã nguồn, **chưa có số liệu đấu nối thật nào chống
-lưng**. Máy kiểm thử không có Docker, không có service Oracle nào, cổng 1521
-đóng; chỉ có thư viện `oracledb` 4.0.2 (chế độ thin, không cần Oracle Client).
+Oracle AI Database 26ai Free 23.26.2.0.0 đã được cài trên máy kiểm thử ngày
+06/08/2026 (DSN `localhost:1521/freepdb1`), đấu nối bằng `oracledb` 4.0.2 chế độ
+thin. Bộ kiểm chứng `loadtest/kiem_chung_oracle.py` chạy **7/7 phép thử đạt**.
+Báo cáo đầy đủ: `loadtest/bao_cao_dau_noi_oracle.md`.
 
-Bộ kiểm chứng đã dựng sẵn tại `loadtest/kiem_chung_oracle.py`. Khi có DSN, chạy:
-
-```
-set ORACLE_USER=...
-set ORACLE_PASSWORD=...
-set ORACLE_DSN=host:1521/service
-set ORACLE_SCHEMA=qlsp_backup
-python loadtest/kiem_chung_oracle.py
-```
-
-Nó chạy 7 phép thử và tự sinh `loadtest/bao_cao_dau_noi_oracle.md`:
-
-| # | Phép thử | Kiểm chứng khẳng định nào |
-|---|---|---|
-| 1 | Đấu nối và phiên bản máy chủ | đấu nối được, ghi lại phiên bản để đưa vào báo cáo |
-| 2 | Độ trễ trước và sau khi pool ấm | Mục 2 — đối chứng với 0,105 giây của Neon |
-| 3 | Không chặn vòng lặp sự kiện | Mục 3, Lỗi 2 — đo độ trễ nhịp tim khi có truy vấn chậm |
-| 4 | Truy vấn song song thật sự | Mục 3, Lỗi 1 — 8 truy vấn đồng thời phải mất ~1 lần, không phải 8 lần |
-| 5 | Phương ngữ SQL | toàn bộ bảng ở Mục 4.2, từng dòng một |
-| 6 | Câu lệnh không trả về bảng | chốt chặn `cursor.description is None` ở Mục 4.1 |
-| 7 | Cắt truy vấn quá hạn | `call_timeout` thay `statement_timeout` |
+| # | Phép thử | Kiểm chứng khẳng định nào | Số đo |
+|---|---|---|---|
+| 1 | Đấu nối và phiên bản | đấu nối được | Oracle 26ai Free 23.26.2.0.0, thin |
+| 2 | Độ trễ pool | Mục 2 — đối chứng 105 ms của Neon | trung vị **0,5 ms**, p95 0,8 ms |
+| 3 | Không chặn vòng lặp sự kiện | Mục 3, Lỗi 2 | trễ tối đa **6,4 ms** / 133 mẫu, trong khi truy vấn ngủ 2 s |
+| 4 | Truy vấn song song thật sự | Mục 3, Lỗi 1 | 8 truy vấn ngủ 2 s xong trong **2,61 s** (nối đuôi sẽ là 16 s) — **6,1x** |
+| 5 | Phương ngữ SQL | bảng Mục 4.2, từng dòng | 5/5 đúng như dự đoán |
+| 6 | Câu lệnh không trả về bảng | chốt chặn `cursor.description is None` | khối PL/SQL trả `rows_affected` |
+| 7 | Cắt truy vấn quá hạn | `call_timeout` thay `statement_timeout` | cắt sau 1,09 s khi đặt 0,5 s |
 
 Bộ kiểm chứng chỉ đọc — không tạo, sửa hay xoá đối tượng nào trong cơ sở dữ liệu.
+
+Hai điều rút ra từ việc chạy thật, mà đọc mã nguồn không cho được:
+
+1. **Lượt chạy đầu tiên chỉ 3/7 đạt.** Bốn phép thử hỏng vì cùng một lỗi: hàm
+   cắt dấu chấm phẩy cắt luôn `END;` của khối PL/SQL. Lỗi có sẵn trong bản gốc,
+   được bê nguyên sang bản viết lại, và không một lần đọc mã nào phát hiện ra.
+2. **Lợi ích độ trễ lớn hơn ước lượng nhưng vẫn không đáng kể.** Ước lượng ban
+   đầu là "dưới 10 ms"; số đo thật là 0,5 ms — nhanh hơn Neon 200 lần. Kết luận
+   ở Mục 1 vẫn không đổi, vì 0,105 giây tiết kiệm được nằm trong một request
+   45 giây.
 
 Phép thử số 3 đã được kiểm chứng ngược để chắc nó không phải phép thử luôn báo
 đạt: chạy trên hàm giả lập, kiểu gọi thẳng của bản cũ cho độ trễ vòng lặp
 **1.990 ms**, kiểu `run_in_executor` của bản mới cho **6,6 ms** — ngưỡng 200 ms
-nằm gọn giữa hai giá trị.
+nằm gọn giữa hai giá trị. Số đo thật trên Oracle (6,4 ms) khớp với vế sau.
 
-Sau khi 7 phép thử trên đạt, mới đến bước chạy lại bộ kiểm thử tải (`loadtest/`)
-để xác nhận không hồi quy — bộ kiểm thử đã được siết để bắt buộc kiểm tra dữ
-liệu trả về, nên sẽ phát hiện được lỗi kiểu "trả lời rỗng nhưng vẫn báo thành công".
+**Còn lại:** bộ kiểm chứng chạy trên schema trống. Bước tiếp theo là nạp dữ liệu
+`qlsp_backup` sang Oracle rồi chạy lại bộ kiểm thử tải (`loadtest/`) để xác nhận
+không hồi quy — bộ kiểm thử đã được siết để bắt buộc kiểm tra dữ liệu trả về,
+nên sẽ phát hiện được lỗi kiểu "trả lời rỗng nhưng vẫn báo thành công".
 
 ---
 
