@@ -98,6 +98,15 @@
   \end{center}
 }
 
+% Duong dan va dinh danh dai trong van ban chay: cho phep ngat dong o / _ . -
+% Neu khong, chuoi \texttt{} dai se tran ra ngoai le phai.
+\newcommand{\fpath}[1]{\nolinkurl{#1}}
+
+% Cot dang doan trong bang: can trai thay vi can deu. Cot hep ma can deu thi
+% LaTeX phai gian khoang trang giua cac chu, doc rat xau.
+\renewcommand{\tabularxcolumn}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+
 \lstset{
   basicstyle=\ttfamily\small,
   backgroundcolor=\color{lightgray},
@@ -183,7 +192,7 @@ thời giữa hai cơ sở dữ liệu trên cùng một máy, cùng một cấu
   \centering\color{white}\bfseries Tóm tắt thông số}}
 \vspace{0.10cm}
 \small
-\begin{tabularx}{0.93\textwidth}{>{\bfseries}p{4.5cm}X}
+\begin{tabularx}{0.93\textwidth}{>{\bfseries}L{4.5cm}X}
 Cơ sở dữ liệu thử nghiệm: & Oracle AI Database 26ai Free 23.26.2.0.0, cài tại chỗ\\
 Cơ sở dữ liệu đối chứng: & PostgreSQL trên Neon, region \texttt{ap-southeast-1}\\
 Dữ liệu chuyển đổi: & 94/94 bảng, 11.687/11.687 dòng, đối chiếu khớp tuyệt đối\\
@@ -277,7 +286,7 @@ vào chỗ đang là nút thắt.
 \begin{table}[H]
 \centering
 \caption{Môi trường kiểm thử}
-\begin{tabularx}{\textwidth}{>{\bfseries}p{4.6cm}X}
+\begin{tabularx}{\textwidth}{>{\bfseries}L{4.6cm}X}
 \toprule
 \rowcolor{lightblue}
 Thành phần & Cấu hình\\
@@ -326,7 +335,7 @@ một phiên làm việc}, với Oracle chạy nền ở cả hai trường hợ
 \subsection{Kết quả}
 
 Toàn bộ schema \texttt{qlsp\_backup} được chuyển từ PostgreSQL sang Oracle bằng
-script \texttt{loadtest/nap\_du\_lieu\_oracle.py}.
+script \fpath{loadtest/nap_du_lieu_oracle.py}.
 
 \begin{table}[H]
 \centering
@@ -352,7 +361,7 @@ hai bên từng bảng một và báo lệch nếu có.
 \begin{table}[H]
 \centering
 \caption{Ánh xạ kiểu dữ liệu PostgreSQL sang Oracle}
-\begin{tabularx}{\textwidth}{>{\ttfamily}p{5.2cm}>{\ttfamily}p{4.6cm}X}
+\begin{tabularx}{\textwidth}{>{\ttfamily}L{5.2cm}>{\ttfamily}L{4.6cm}X}
 \toprule
 \rowcolor{lightblue}
 \textrm{\bfseries PostgreSQL} & \textrm{\bfseries Oracle} & \textrm{\bfseries Ghi chú}\\
@@ -382,7 +391,7 @@ hai bảng ấy.
 \section{Kiểm chứng tầng đấu nối}
 
 Trước khi đo tải, tầng đấu nối được kiểm chứng riêng bằng bộ kiểm thử
-\texttt{loadtest/kiem\_chung\_oracle.py}. Bộ này chỉ đọc, không tạo, sửa hay
+\fpath{loadtest/kiem_chung_oracle.py}. Bộ này chỉ đọc, không tạo, sửa hay
 xoá đối tượng nào trong cơ sở dữ liệu.
 
 \begin{table}[H]
@@ -463,7 +472,8 @@ Ngưỡng 200 ms nằm gọn giữa hai giá trị, và số đo thật trên Or
 \centering
 \caption{Sáu lượt đo ở mức 50 người dùng đồng thời, 100\% trả về dữ liệu thật}
 \label{tab:sauluot}
-\begin{tabular}{@{}p{5.3cm}cccc@{}}
+\small
+\begin{tabular}{@{}L{5.0cm}cccc@{}}
 \toprule
 \rowcolor{lightblue}
 Lượt đo & Thông lượng & Truy vấn CSDL & Câu qua LLM & p95 câu LLM\\
@@ -559,19 +569,20 @@ Mã nguồn và chỉ thị cho mô hình đang gắn chặt với PostgreSQL. B
 \centering
 \caption{Các điểm khác biệt phương ngữ, đã kiểm chứng bằng số đo}
 \label{tab:phuongngu}
-\begin{tabularx}{\textwidth}{p{4.0cm}Xc}
+\small
+\begin{tabular}{@{}L{4.9cm}L{3.1cm}L{7.2cm}@{}}
 \toprule
 \rowcolor{lightblue}
 Cú pháp PostgreSQL & Kết quả trên Oracle & Cách thay\\
 \midrule
 \texttt{LIMIT 10} & \bad{ORA-03049} & \texttt{FETCH FIRST 10 ROWS ONLY}\\
-\texttt{information\_schema.columns} & \bad{ORA-00942} & \texttt{ALL\_TAB\_COLUMNS}\\
+\fpath{information_schema.columns} & \bad{ORA-00942} & \texttt{ALL\_TAB\_COLUMNS}\\
 \texttt{FROM bang AS u} & \bad{ORA-03048} & \texttt{FROM bang u} (bỏ \texttt{AS})\\
-\texttt{search\_path} & Không có & \texttt{ALTER SESSION SET CURRENT\_SCHEMA}\\
+\texttt{search\_path} & Không có & \texttt{ALTER SESSION SET}\newline\texttt{CURRENT\_SCHEMA}\\
 \texttt{SELECT} không \texttt{FROM} & \ok{Chạy được} & Chỉ từ Oracle 23ai trở đi\\
 \texttt{AS} trước bí danh cột & \ok{Chạy được} & Giữ nguyên\\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 Hai dòng \texttt{ORA-03048} và \texttt{SELECT} không \texttt{FROM}
@@ -696,24 +707,25 @@ nguồn:
 
 \begin{table}[H]
 \centering
-\begin{tabularx}{\textwidth}{>{\ttfamily\small}p{6.6cm}X}
+\footnotesize
+\begin{tabular}{@{}L{7.9cm}L{7.3cm}@{}}
 \toprule
 \rowcolor{lightblue}
-\textrm{\bfseries File} & \textrm{\bfseries Nội dung}\\
+\bfseries File & \bfseries Nội dung\\
 \midrule
-loadtest/nap\_du\_lieu\_oracle.py & Script chuyển dữ liệu, tự đối chiếu số dòng\\
-loadtest/kiem\_chung\_oracle.py & Bộ 7 phép thử đấu nối, tự sinh báo cáo\\
-loadtest/bao\_cao\_dau\_noi\_oracle.md & Báo cáo đấu nối do máy sinh\\
-loadtest/k6\_50\_oracle\_np4\_v2.json & Đo tải Oracle, lượt 1 (nguội)\\
-loadtest/k6\_50\_oracle\_np4\_lan2\_v2.json & Đo tải Oracle, lượt 2\\
-loadtest/k6\_50\_oracle\_np4\_lan3\_v2.json & Đo tải Oracle, lượt 3\\
-loadtest/k6\_50\_pg\_hnay\_lan1\_v2.json & Đo tải PostgreSQL, lượt 1\\
-loadtest/k6\_50\_pg\_hnay\_lan2\_v2.json & Đo tải PostgreSQL, lượt 2\\
-loadtest/k6\_50\_np4\_v2.json & Đo tải PostgreSQL, mốc gốc 05/08\\
-loadtest/k6\_50\_pg\_kem\_oracle\_v2.json & Lượt cô lập nguyên nhân\\
-phan\_tich\_doi\_sang\_oracle.md & Phân tích chi tiết kèm diễn giải\\
+\fpath{loadtest/nap_du_lieu_oracle.py} & Script chuyển dữ liệu, tự đối chiếu số dòng\\
+\fpath{loadtest/kiem_chung_oracle.py} & Bộ 7 phép thử đấu nối, tự sinh báo cáo\\
+\fpath{loadtest/bao_cao_dau_noi_oracle.md} & Báo cáo đấu nối do máy sinh\\
+\fpath{loadtest/k6_50_oracle_np4_v2.json} & Đo tải Oracle, lượt 1 (nguội)\\
+\fpath{loadtest/k6_50_oracle_np4_lan2_v2.json} & Đo tải Oracle, lượt 2\\
+\fpath{loadtest/k6_50_oracle_np4_lan3_v2.json} & Đo tải Oracle, lượt 3\\
+\fpath{loadtest/k6_50_pg_hnay_lan1_v2.json} & Đo tải PostgreSQL, lượt 1\\
+\fpath{loadtest/k6_50_pg_hnay_lan2_v2.json} & Đo tải PostgreSQL, lượt 2\\
+\fpath{loadtest/k6_50_np4_v2.json} & Đo tải PostgreSQL, mốc gốc 05/08\\
+\fpath{loadtest/k6_50_pg_kem_oracle_v2.json} & Lượt cô lập nguyên nhân\\
+\fpath{phan_tich_doi_sang_oracle.md} & Phân tích chi tiết kèm diễn giải\\
 \bottomrule
-\end{tabularx}
+\end{tabular}
 \end{table}
 
 \vspace{0.4cm}
