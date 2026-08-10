@@ -1,0 +1,734 @@
+% =====================================================================
+%  BAO CAO DANH GIA PHUONG AN CHUYEN CO SO DU LIEU SANG ORACLE
+%  Form: Bao cao VNPT IT - Trung tam DMS
+%  Bien dich bang: xelatex bao_cao_oracle.tex  (chay 2 lan de co muc luc)
+% =====================================================================
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{fontspec}
+\IfFontExistsTF{Latin Modern Roman}
+  {\setmainfont{Latin Modern Roman}}
+  {\setmainfont{Times New Roman}}
+\IfFontExistsTF{Latin Modern Sans}
+  {\setsansfont{Latin Modern Sans}}
+  {\setsansfont{Arial}}
+\IfFontExistsTF{Latin Modern Mono}
+  {\setmonofont{Latin Modern Mono}}
+  {\setmonofont{Consolas}}
+\usepackage{amsmath}
+\usepackage{polyglossia}
+\setdefaultlanguage{vietnamese}
+\usepackage{geometry}
+\geometry{top=2.25cm,bottom=2.2cm,left=2.35cm,right=2.15cm}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{array,booktabs,longtable,tabularx,multirow}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{caption}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{setspace}
+\usepackage{microtype}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\definecolor{vnptblue}{HTML}{006FD6}
+\definecolor{deepblue}{HTML}{004E92}
+\definecolor{lightblue}{HTML}{EEF6FF}
+\definecolor{lightgray}{HTML}{F4F5F7}
+\definecolor{darkgray}{HTML}{2B2B2B}
+\definecolor{successgreen}{HTML}{15803D}
+\definecolor{warnorange}{HTML}{C77700}
+\definecolor{dangerred}{HTML}{C42828}
+
+\newcommand{\ok}[1]{\textcolor{successgreen}{\bfseries #1}}
+\newcommand{\warn}[1]{\textcolor{warnorange}{\bfseries #1}}
+\newcommand{\bad}[1]{\textcolor{dangerred}{\bfseries #1}}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=vnptblue,
+  urlcolor=deepblue,
+  citecolor=deepblue,
+  pdfauthor={Lê Đức Anh},
+  pdftitle={Báo cáo Đánh giá Phương án Chuyển Cơ sở Dữ liệu sang Oracle},
+  pdfsubject={Kiểm chứng đấu nối, chuyển đổi dữ liệu và đo tải đối chứng}
+}
+
+\setlength{\parindent}{0.7cm}
+\setlength{\parskip}{3pt}
+\setlength{\headheight}{15pt}
+\setlist[itemize]{leftmargin=1.1cm,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=1.1cm,itemsep=3pt,topsep=3pt}
+\renewcommand{\arraystretch}{1.2}
+
+\titleformat{\section}
+  {\Large\bfseries\color{vnptblue}}
+  {\thesection.}{0.55em}{}
+\titleformat{\subsection}
+  {\large\bfseries\color{darkgray}}
+  {\thesubsection.}{0.5em}{}
+\titleformat{\subsubsection}
+  {\normalsize\bfseries}
+  {\thesubsubsection.}{0.5em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\bfseries VNPT IT - TRUNG TÂM DMS}
+\fancyhead[R]{\small\itshape Báo cáo Đánh giá Phương án Oracle}
+\fancyfoot[L]{\small Người thực hiện: Lê Đức Anh}
+\fancyfoot[R]{\small\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+
+\newcommand{\methodbox}[2]{%
+  \begin{center}
+  \fcolorbox{vnptblue}{lightblue}{%
+    \begin{minipage}{0.92\textwidth}
+      \vspace{0.18cm}
+      {\bfseries\color{deepblue}#1}\par
+      \vspace{0.08cm}
+      #2
+      \vspace{0.18cm}
+    \end{minipage}
+  }
+  \end{center}
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{lightgray},
+  frame=single,
+  rulecolor=\color{gray},
+  breaklines=true,
+  showstringspaces=false,
+  columns=fullflexible
+}
+
+\begin{document}
+
+% ======================= TRANG BIA =======================
+\begin{titlepage}
+\thispagestyle{empty}
+
+\begin{minipage}[t]{0.24\textwidth}
+  \vspace{0pt}
+  \IfFileExists{vnpt_logo.png}{
+    \includegraphics[width=3.25cm]{vnpt_logo.png}
+  }{
+    \fcolorbox{vnptblue}{white}{
+      \parbox[c][1.5cm][c]{3.0cm}{
+        \centering\color{vnptblue}\Large\bfseries VNPT
+      }
+    }
+  }
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.70\textwidth}
+  \vspace{0.8cm}
+  \begin{center}
+  {\bfseries TẬP ĐOÀN BƯU CHÍNH VIỄN THÔNG VIỆT NAM}\\[2pt]
+  {\bfseries VNPT IT - TRUNG TÂM DMS}\\[3pt]
+  {\itshape Bộ phận Phát triển Giải pháp AI}
+  \end{center}
+\end{minipage}
+
+\vspace{0.55cm}
+
+\begin{center}
+{\LARGE\bfseries BÁO CÁO ĐÁNH GIÁ PHƯƠNG ÁN}\\[0.25cm]
+{\LARGE\bfseries CHUYỂN CƠ SỞ DỮ LIỆU SANG ORACLE}\\[0.12cm]
+{\LARGE\bfseries CHO HỆ THỐNG TEXT-TO-SQL}\\[0.30cm]
+
+{\large\bfseries Kiểm chứng đấu nối, chuyển đổi dữ liệu}\\
+{\large\bfseries và đo tải đối chứng Oracle 26ai Free với PostgreSQL Neon}\\[0.42cm]
+
+\rule{0.47\textwidth}{1.5pt}
+\end{center}
+
+\vspace{0.42cm}
+
+\begin{center}
+\setlength{\fboxsep}{0pt}
+\fcolorbox{vnptblue}{white}{%
+\begin{minipage}{0.94\textwidth}
+\colorbox{vnptblue}{\parbox{\linewidth}{%
+  \centering\color{white}\bfseries\large
+  PHẠM VI BÁO CÁO}}
+\vspace{0.15cm}
+\begin{minipage}{0.92\linewidth}
+\hspace{0.45cm}
+\small
+Báo cáo trả lời câu hỏi \textbf{``có nên chuyển cơ sở dữ liệu của hệ thống
+Text-to-SQL từ PostgreSQL sang Oracle hay không''} bằng số liệu đo được, không
+bằng suy luận. Nội dung gồm bốn phần: dựng một instance Oracle thật và kiểm
+chứng tầng đấu nối; chuyển toàn bộ 94 bảng dữ liệu nghiệp vụ sang Oracle; cho
+ứng dụng chạy thật trên Oracle; và đo tải đối chứng ở mức 50 người dùng đồng
+thời giữa hai cơ sở dữ liệu trên cùng một máy, cùng một cấu hình suy luận.
+\end{minipage}
+\vspace{0.15cm}
+\end{minipage}}
+\end{center}
+
+\vspace{0.18cm}
+
+\begin{center}
+\setlength{\fboxsep}{0pt}
+\fcolorbox{darkgray}{white}{
+\begin{minipage}{0.94\textwidth}
+\colorbox{darkgray}{\parbox{\linewidth}{%
+  \centering\color{white}\bfseries Tóm tắt thông số}}
+\vspace{0.10cm}
+\small
+\begin{tabularx}{0.93\textwidth}{>{\bfseries}p{4.5cm}X}
+Cơ sở dữ liệu thử nghiệm: & Oracle AI Database 26ai Free 23.26.2.0.0, cài tại chỗ\\
+Cơ sở dữ liệu đối chứng: & PostgreSQL trên Neon, region \texttt{ap-southeast-1}\\
+Dữ liệu chuyển đổi: & 94/94 bảng, 11.687/11.687 dòng, đối chiếu khớp tuyệt đối\\
+Kiểm chứng đấu nối: & 7/7 phép thử đạt\\
+Đo tải: & 6 lượt ở mức 50 người dùng, 100\% trả về dữ liệu thật\\
+Độ trễ tầng CSDL: & Oracle \textbf{nhanh hơn 6,4 lần} (15 ms so với 94 ms)\\
+Thông lượng hệ thống: & Oracle \textbf{còn 82\%} (4,58 so với 5,60 req/giây)\\
+Kết luận: & \textbf{Không nên đổi vì lý do hiệu năng}\\
+\end{tabularx}
+\vspace{0.10cm}
+\end{minipage}}
+\end{center}
+
+\vfill
+
+\begin{flushright}\small
+\textbf{Người thực hiện:}\\
+\textit{Lê Đức Anh}\\
+Trung tâm DMS\\
+Ngày 10 tháng 08 năm 2026
+\end{flushright}
+
+\end{titlepage}
+
+\setcounter{page}{1}
+\setcounter{tocdepth}{1}
+\tableofcontents
+\clearpage
+
+% ======================= 1. EXECUTIVE SUMMARY =======================
+\section{Tóm tắt kết quả cho Lãnh đạo}
+
+\subsection{Kết luận}
+
+\methodbox{Khuyến nghị}{%
+\textbf{Nếu lý do là hiệu năng: không nên đổi.} Cơ sở dữ liệu chiếm dưới 1\%
+độ trễ của hệ thống. Đặt Oracle trên cùng máy chủ với tầng suy luận còn làm
+thông lượng \textbf{giảm 18\%}, vì Oracle giành CPU và bộ nhớ với chính nút
+thắt của hệ thống.\par
+\vspace{0.12cm}
+\textbf{Nếu lý do là yêu cầu nghiệp vụ: làm được.} Toàn bộ phần kỹ thuật đã
+được kiểm chứng chạy thật trong báo cáo này. Chi phí còn lại nằm ở việc sửa
+phương ngữ SQL và kiểm thử lại chất lượng sinh SQL, không nằm ở hạ tầng.}
+
+\subsection{Ba con số cần nhớ}
+
+\begin{table}[H]
+\centering
+\caption{Tóm tắt kết quả đo tải ở mức 50 người dùng đồng thời}
+\label{tab:tomtat}
+\begin{tabularx}{\textwidth}{>{\bfseries}Xccc}
+\toprule
+\rowcolor{lightblue}
+Chỉ số & Oracle tại chỗ & PostgreSQL Neon & Chênh lệch\\
+\midrule
+Truy vấn chỉ chạm CSDL (trung vị) & \ok{15 ms} & 94 ms & Oracle nhanh hơn \textbf{6,4 lần}\\
+Thông lượng toàn hệ thống & \bad{4,58 req/s} & 5,60 req/s & Oracle còn \textbf{82\%}\\
+Câu hỏi đi qua mô hình (trung vị) & \bad{55,3 giây} & 42,8 giây & Oracle chậm hơn \textbf{29\%}\\
+\bottomrule
+\end{tabularx}
+
+\vspace{0.15cm}
+{\small Số liệu là trung bình các lượt đo đã ấm. Cả hai cột dùng cùng một máy,
+cùng cấu hình Ollama (\texttt{OLLAMA\_NUM\_PARALLEL}=4, GPU tích hợp tắt), cùng
+bộ câu hỏi, cùng kịch bản k6. Biến duy nhất thay đổi là cơ sở dữ liệu.}
+\end{table}
+
+\subsection{Vì sao nhanh hơn 6 lần mà vẫn lỗ}
+
+Hệ thống có hai nhánh xử lý tách biệt. Năm trong sáu câu hỏi của bộ kiểm thử
+được nhận dạng theo mẫu và sinh thẳng câu lệnh SQL, \textbf{không gọi mô hình
+ngôn ngữ}. Chỉ một câu đi qua tầng suy luận --- và chính câu đó chiếm gần như
+toàn bộ thời gian.
+
+Đổi cơ sở dữ liệu chỉ tác động vào nhánh thứ nhất, nhánh vốn đã nhanh. Rút
+94 mi\-li\-giây xuống 15 mi\-li\-giây là cải thiện thật, nhưng nó nằm trong một
+request mất 42--55 \emph{giây}. Trong khi đó, việc đặt thêm một tiến trình
+Oracle lên cùng máy lại lấy mất CPU và RAM của llama.cpp --- tức là lấy đúng
+vào chỗ đang là nút thắt.
+
+\methodbox{Nói gọn}{Phương án này làm cho \textbf{dưới 1\% nhanh lên 6 lần},
+đổi lấy \textbf{99\% còn lại chậm đi gần một phần ba}.}
+
+\clearpage
+
+% ======================= 2. MOI TRUONG =======================
+\section{Môi trường và phương pháp}
+
+\subsection{Cấu hình môi trường}
+
+\begin{table}[H]
+\centering
+\caption{Môi trường kiểm thử}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{4.6cm}X}
+\toprule
+\rowcolor{lightblue}
+Thành phần & Cấu hình\\
+\midrule
+Máy chủ thử nghiệm & Windows 11 Home, 13,8 GB RAM, APU Radeon 780M\\
+Cơ sở dữ liệu thử nghiệm & Oracle AI Database 26ai Free 23.26.2.0.0, cài tại chỗ, PDB \texttt{FREEPDB1}, listener cổng 1521\\
+Cơ sở dữ liệu đối chứng & PostgreSQL trên Neon, region \texttt{ap-southeast-1} (Singapore)\\
+Thư viện đấu nối & \texttt{python-oracledb} 4.0.2, chế độ thin (không cần Oracle Client)\\
+Tầng suy luận & Ollama \texttt{llama3.2} 3B, \texttt{OLLAMA\_NUM\_PARALLEL}=4, GPU tích hợp tắt\\
+Ứng dụng & Vanna 2.0 trên FastAPI/Uvicorn, 1 worker\\
+Công cụ đo tải & k6, kịch bản \texttt{ramping-vus}, cao điểm 50 người dùng\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Tiêu chí thành công}
+
+Một request chỉ được tính là thành công khi \textbf{có dữ liệu thật trả về},
+tức luồng SSE phải chứa sự kiện \texttt{dataframe}. Tiêu chí ``HTTP 200 kèm
+\texttt{[DONE]}'' bị loại bỏ vì nó không phát hiện được câu trả lời rỗng: ứng
+dụng vẫn đóng luồng bình thường và vẫn kết bằng câu ``Đã hoàn tất truy vấn''
+ngay cả khi tầng SQL hỏng hoàn toàn.
+
+Điều này không phải giả định lý thuyết. Trong quá trình thực hiện báo cáo này,
+lỗi đó đã xảy ra thật và được mô tả ở Mục~\ref{sec:loi}.
+
+\subsection{Cách bố trí phép so sánh}
+
+Điểm yếu thường gặp của loại so sánh này là thay đổi nhiều biến cùng lúc. Để
+tránh, các lượt đo được bố trí như sau:
+
+\begin{itemize}
+\item cả hai cơ sở dữ liệu đo trên \textbf{cùng một máy}, trong \textbf{cùng
+một phiên làm việc}, với Oracle chạy nền ở cả hai trường hợp;
+\item cấu hình Ollama giữ nguyên tuyệt đối giữa các lượt;
+\item biến duy nhất thay đổi là công tắc \texttt{DATABASE\_BACKEND};
+\item mỗi cấu hình đo \textbf{nhiều lượt}, vì độ dao động giữa các lượt lớn
+(xem Mục~\ref{sec:daodong}).
+\end{itemize}
+
+\clearpage
+
+% ======================= 3. CHUYEN DOI DU LIEU =======================
+\section{Chuyển đổi dữ liệu}
+
+\subsection{Kết quả}
+
+Toàn bộ schema \texttt{qlsp\_backup} được chuyển từ PostgreSQL sang Oracle bằng
+script \texttt{loadtest/nap\_du\_lieu\_oracle.py}.
+
+\begin{table}[H]
+\centering
+\caption{Kết quả chuyển đổi dữ liệu}
+\begin{tabularx}{\textwidth}{>{\bfseries}Xcc}
+\toprule
+\rowcolor{lightblue}
+Hạng mục & Nguồn (PostgreSQL) & Đích (Oracle)\\
+\midrule
+Số bảng & 94 & \ok{94}\\
+Số dòng & 11.687 & \ok{11.687}\\
+Đối chiếu từng bảng & --- & \ok{Khớp toàn bộ}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Script có thể chạy lại nhiều lần: mỗi lượt xoá schema cũ rồi dựng lại từ đầu,
+nên không tích luỹ sai lệch. Sau khi chép xong, script tự đối chiếu số dòng
+hai bên từng bảng một và báo lệch nếu có.
+
+\subsection{Ánh xạ kiểu dữ liệu}
+
+\begin{table}[H]
+\centering
+\caption{Ánh xạ kiểu dữ liệu PostgreSQL sang Oracle}
+\begin{tabularx}{\textwidth}{>{\ttfamily}p{5.2cm}>{\ttfamily}p{4.6cm}X}
+\toprule
+\rowcolor{lightblue}
+\textrm{\bfseries PostgreSQL} & \textrm{\bfseries Oracle} & \textrm{\bfseries Ghi chú}\\
+\midrule
+text, character varying & VARCHAR2(n) / CLOB & Chọn theo độ dài thực tế; nhân 3 cho UTF-8\\
+uuid & VARCHAR2(36) & \\
+jsonb, json, ARRAY & VARCHAR2 / CLOB & Lưu nguyên văn JSON\\
+boolean & NUMBER(1) & 0/1, chạy được trên mọi bản Oracle\\
+smallint, integer, bigint & NUMBER(5/10/19) & \\
+numeric & NUMBER(p,s) & Giữ nguyên độ chính xác\\
+timestamp without time zone & TIMESTAMP & \\
+timestamp with time zone & TIMESTAMP WITH TIME ZONE & \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{Một điểm cần lưu ý khi vận hành:} hai cột trong dữ liệu nghiệp vụ trùng
+từ khoá Oracle --- \texttt{product\_lifecycle\_history.comment} và
+\texttt{spdv\_lifecycle\_timeline.date}. Script đã tự bọc dấu nháy kép cho hai
+cột này, nhưng \textbf{mọi câu SQL sinh ra sau này cũng phải bọc nháy}, nếu
+không sẽ lỗi cú pháp. Đây là loại lỗi chỉ xuất hiện khi có ai đó hỏi đúng vào
+hai bảng ấy.
+
+\clearpage
+
+% ======================= 4. KIEM CHUNG DAU NOI =======================
+\section{Kiểm chứng tầng đấu nối}
+
+Trước khi đo tải, tầng đấu nối được kiểm chứng riêng bằng bộ kiểm thử
+\texttt{loadtest/kiem\_chung\_oracle.py}. Bộ này chỉ đọc, không tạo, sửa hay
+xoá đối tượng nào trong cơ sở dữ liệu.
+
+\begin{table}[H]
+\centering
+\caption{Kết quả 7 phép thử đấu nối}
+\label{tab:daunoi}
+\begin{tabularx}{\textwidth}{clXc}
+\toprule
+\rowcolor{lightblue}
+\# & Phép thử & Số đo & Kết quả\\
+\midrule
+1 & Đấu nối và phiên bản & Oracle 26ai Free 23.26.2.0.0, chế độ thin & \ok{ĐẠT}\\
+2 & Độ trễ khi pool đã ấm & Trung vị 0,5 ms; p95 0,8 ms & \ok{ĐẠT}\\
+3 & Không chặn vòng lặp sự kiện & Trễ tối đa 6,4 ms trên 133 mẫu, trong khi có truy vấn ngủ 2 giây & \ok{ĐẠT}\\
+4 & Truy vấn song song thật & 8 truy vấn ngủ 2 giây xong trong 2,61 giây (hệ số 6,1$\times$) & \ok{ĐẠT}\\
+5 & Phương ngữ SQL & 5/5 điểm đúng như dự đoán & \ok{ĐẠT}\\
+6 & Câu lệnh không trả về bảng & Khối PL/SQL trả về \texttt{rows\_affected} & \ok{ĐẠT}\\
+7 & Cắt truy vấn quá hạn & Cắt sau 1,09 giây khi đặt \texttt{call\_timeout} 0,5 giây & \ok{ĐẠT}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Độ trễ thuần của tầng cơ sở dữ liệu}
+
+Phép thử số 2 cho con số đáng chú ý nhất về lợi ích của việc đặt cơ sở dữ liệu
+tại chỗ:
+
+\begin{table}[H]
+\centering
+\caption{Độ trễ một truy vấn tối giản khi connection pool đã ấm}
+\begin{tabularx}{\textwidth}{Xcc}
+\toprule
+\rowcolor{lightblue}
+Cấu hình & Trung vị & p95\\
+\midrule
+PostgreSQL trên Neon, Singapore & 105 ms & ---\\
+Oracle tại chỗ (loopback) & \ok{0,5 ms} & 0,8 ms\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Nhanh hơn khoảng \textbf{200 lần}, lớn hơn cả ước lượng ban đầu là ``dưới 10
+mi\-li\-giây''. Cần đặt đúng tỉ lệ: đó là tiết kiệm 0,105 giây trong một
+request mất 45 giây --- cải thiện 0,2\%.
+
+\subsection{Kiểm chứng ngược phép thử số 3}
+
+Phép thử quan trọng nhất là phép thử số 3, vì nó phát hiện lỗi chặn vòng lặp sự
+kiện --- loại lỗi từng làm tỉ lệ lỗi của hệ thống lên 13\% ở đợt kiểm thử đầu
+tiên. Để chắc chắn nó không phải phép thử luôn báo đạt, phép thử được chạy
+ngược trên một hàm giả lập:
+
+\begin{table}[H]
+\centering
+\caption{Kiểm chứng ngược: bộ phát hiện có phân biệt được hai kiểu cài đặt không}
+\begin{tabularx}{\textwidth}{Xcc}
+\toprule
+\rowcolor{lightblue}
+Kiểu cài đặt & Độ trễ vòng lặp sự kiện & Kết luận\\
+\midrule
+Gọi thẳng thư viện đồng bộ (bản cũ) & \bad{1.990 ms} & KHÔNG ĐẠT\\
+Đẩy sang thread pool (bản đã sửa) & \ok{6,6 ms} & ĐẠT\\
+\midrule
+Số đo thật trên Oracle & \ok{6,4 ms} & ĐẠT\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Ngưỡng 200 ms nằm gọn giữa hai giá trị, và số đo thật trên Oracle khớp với vế
+``đã sửa''.
+
+% ======================= 5. KET QUA DO TAI =======================
+\section{Kết quả đo tải}
+
+\subsection{Toàn bộ các lượt đo}
+
+\begin{table}[H]
+\centering
+\caption{Sáu lượt đo ở mức 50 người dùng đồng thời, 100\% trả về dữ liệu thật}
+\label{tab:sauluot}
+\begin{tabular}{@{}p{5.3cm}cccc@{}}
+\toprule
+\rowcolor{lightblue}
+Lượt đo & Thông lượng & Truy vấn CSDL & Câu qua LLM & p95 câu LLM\\
+\midrule
+Oracle, lượt 1 (\emph{nguội}) & \bad{2,94} & 16 ms & \bad{87,7 s} & 116,6 s\\
+Oracle, lượt 2 & 4,13 & 14 ms & 55,9 s & 87,4 s\\
+Oracle, lượt 3 & 5,02 & 15 ms & 54,8 s & 57,0 s\\
+\midrule
+PostgreSQL, lượt 1 (10/08) & 5,10 & 98 ms & 44,0 s & 70,8 s\\
+PostgreSQL, lượt 2 (10/08) & \ok{6,10} & 91 ms & \ok{41,6 s} & 44,6 s\\
+PostgreSQL, mốc gốc (05/08) & 6,06 & 105 ms & 45,3 s & 47,8 s\\
+\bottomrule
+\end{tabular}
+
+\vspace{0.15cm}
+{\small Thông lượng tính bằng req/giây. ``Truy vấn CSDL'' là trung vị của năm
+câu hỏi không gọi mô hình. Mốc gốc 05/08 tái lập được trong hôm nay (6,10 so
+với 6,06), nên bản thân mốc chuẩn vẫn dùng được.}
+\end{table}
+
+\subsection{Vì sao phải đo nhiều lượt}
+\label{sec:daodong}
+
+\methodbox{Một đính chính về phương pháp}{%
+Bản đầu của phân tích này kết luận ``Oracle làm hệ thống chậm đi gấp đôi'' dựa
+trên \textbf{đúng một lượt đo}. Lượt đó là lượt Oracle nguội, khi cache của cơ
+sở dữ liệu chưa ấm. Ba lượt Oracle liên tiếp cho 2,94 $\to$ 4,13 $\to$ 5,02
+req/giây --- tức \textbf{độ dao động giữa các lượt còn lớn hơn cả hiệu ứng đang
+muốn đo}. Kết luận cũ là nói quá và đã được sửa bằng số liệu trong báo cáo này.}
+
+Bài học vận hành: khi tự đo lại, phải chạy ít nhất ba lượt rồi bỏ lượt đầu.
+Một lượt duy nhất trên Oracle nguội sẽ cho kết luận sai lệch tới gần hai lần.
+
+\subsection{So sánh các lượt đã ấm}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=26pt,
+  width=0.92\textwidth, height=6.6cm,
+  ylabel={Thông lượng (request/giây)},
+  symbolic x coords={Oracle, PostgreSQL},
+  xtick=data,
+  ymin=0, ymax=7,
+  nodes near coords, nodes near coords style={font=\small},
+  enlarge x limits=0.55,
+]
+\addplot[fill=vnptblue] coordinates {(Oracle,4.58) (PostgreSQL,5.60)};
+\end{axis}
+\end{tikzpicture}
+\caption{Thông lượng trung bình các lượt đã ấm: Oracle đạt 82\% của PostgreSQL}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{So sánh trực tiếp, chỉ tính các lượt đã ấm}
+\label{tab:soam}
+\begin{tabularx}{\textwidth}{>{\bfseries}Xccc}
+\toprule
+\rowcolor{lightblue}
+Chỉ số & Oracle tại chỗ & PostgreSQL Neon & Chênh lệch\\
+\midrule
+Thông lượng & \bad{4,58 req/s} & \ok{5,60 req/s} & Oracle còn 82\%\\
+Câu qua mô hình (trung vị) & \bad{55,3 giây} & \ok{42,8 giây} & Oracle chậm hơn 29\%\\
+Truy vấn chỉ chạm CSDL & \ok{15 ms} & 94 ms & Oracle nhanh hơn 6,4 lần\\
+Tỉ lệ trả về dữ liệu thật & \ok{100\%} & \ok{100\%} & Không chênh\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Cô lập nguyên nhân}
+
+Để xác định nguyên nhân của phần lỗ, một lượt đo riêng được thực hiện với
+\textbf{ứng dụng vẫn dùng PostgreSQL, nhưng Oracle chạy nền mà không phục vụ gì}.
+Kết quả: thông lượng đã giảm và câu qua mô hình đã chậm thêm, dù ứng dụng không
+gửi một truy vấn nào tới Oracle.
+
+Điều đó loại trừ giả thuyết ``Oracle xử lý truy vấn chậm'' và xác nhận nguyên
+nhân thật: \textbf{Oracle giành CPU và bộ nhớ với llama.cpp}. Trên máy 13,8 GB
+RAM đang phải nạp một mô hình 3,8 GB, việc thêm một tiến trình cơ sở dữ liệu
+chiếm khoảng 600 MB thường trú là đủ để làm chậm nhánh suy luận.
+
+\clearpage
+
+% ======================= 6. PHUONG NGU SQL =======================
+\section{Phương ngữ SQL}
+
+Mã nguồn và chỉ thị cho mô hình đang gắn chặt với PostgreSQL. Bảng dưới đây đã
+được kiểm chứng từng dòng trên Oracle thật.
+
+\begin{table}[H]
+\centering
+\caption{Các điểm khác biệt phương ngữ, đã kiểm chứng bằng số đo}
+\label{tab:phuongngu}
+\begin{tabularx}{\textwidth}{p{4.0cm}Xc}
+\toprule
+\rowcolor{lightblue}
+Cú pháp PostgreSQL & Kết quả trên Oracle & Cách thay\\
+\midrule
+\texttt{LIMIT 10} & \bad{ORA-03049} & \texttt{FETCH FIRST 10 ROWS ONLY}\\
+\texttt{information\_schema.columns} & \bad{ORA-00942} & \texttt{ALL\_TAB\_COLUMNS}\\
+\texttt{FROM bang AS u} & \bad{ORA-03048} & \texttt{FROM bang u} (bỏ \texttt{AS})\\
+\texttt{search\_path} & Không có & \texttt{ALTER SESSION SET CURRENT\_SCHEMA}\\
+\texttt{SELECT} không \texttt{FROM} & \ok{Chạy được} & Chỉ từ Oracle 23ai trở đi\\
+\texttt{AS} trước bí danh cột & \ok{Chạy được} & Giữ nguyên\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Hai dòng \texttt{ORA-03048} và \texttt{SELECT} không \texttt{FROM}
+\textbf{không có trong bản phân tích ban đầu} --- chúng chỉ lộ ra khi chạy thật.
+Đây là minh hoạ cụ thể cho việc phân tích tĩnh không thay thế được đo đạc.
+
+\clearpage
+
+% ======================= 7. LOI PHAT HIEN =======================
+\section{Các lỗi phát hiện trong quá trình thực hiện}
+\label{sec:loi}
+
+Phần này ghi lại bốn lỗi phát hiện được nhờ chạy thật. Cả bốn đều đã sửa.
+
+\subsection{Mô hình phớt lờ chỉ thị phương ngữ}
+
+Ở lượt chạy thử đầu tiên trên Oracle, năm câu khớp mẫu chạy tốt nhưng câu duy
+nhất đi qua mô hình thì hỏng: \texttt{llama3.2} 3B sinh ra
+\texttt{... ORDER BY id LIMIT 5}, Oracle trả \texttt{ORA-03049}. Chỉ thị Oracle
+lúc đó nằm ở mục 9, cuối prompt hệ thống.
+
+Chuyển nguyên khối chỉ thị lên \textbf{ngay đầu prompt}, kèm ví dụ SAI/ĐÚNG cụ
+thể, thì mô hình tuân thủ và cả 6/6 câu đều chạy. Đây đúng là rủi ro đã được
+cảnh báo từ đầu, nhưng nó sửa được bằng cách viết lại chỉ thị, \textbf{không
+cần đổi mô hình}.
+
+\subsection{Ứng dụng báo thành công khi truy vấn thất bại}
+
+Lỗi nghiêm trọng nhất về mặt vận hành. Khi \texttt{run\_sql} thất bại, ứng dụng
+vẫn đóng luồng SSE bình thường và vẫn trả lời:
+
+\begin{center}
+\itshape ``Đã hoàn tất truy vấn. Kết quả chính xác được hiển thị trong bảng
+phía trên.''
+\end{center}
+
+\noindent mặc dù không có bảng nào. Nghĩa là một tầng SQL hỏng hoàn toàn trông
+giống hệt một tầng khoẻ mạnh --- với người dùng, với log, và với bất kỳ phép đo
+tải nào chỉ kiểm tra luồng có kết thúc hay không.
+
+Đã sửa: ghi log kèm câu SQL mỗi khi truy vấn thất bại, và trả về thông điệp nói
+đúng sự thật kèm mã lỗi từ cơ sở dữ liệu.
+
+\subsection{Lỗi cắt dấu chấm phẩy của khối PL/SQL}
+
+Lớp \texttt{OracleRunner} cắt dấu chấm phẩy cuối câu lệnh --- đúng với SQL
+thường, nhưng sai với khối PL/SQL, vì \texttt{END;} là cú pháp bắt buộc. Mọi
+khối PL/SQL đều nhận \texttt{PLS-00103}. Lỗi này có sẵn trong mã nguồn gốc và
+chỉ lộ ra khi đấu nối thật.
+
+\subsection{Oracle không tự phục hồi sau khi khởi động lại máy}
+
+Sau một lần khởi động lại, ứng dụng chết hoàn toàn với \texttt{DPY-6001:
+Service ``freepdb1'' is not registered with the listener}. Chẩn đoán cho thấy
+instance \textbf{vẫn OPEN} và PDB \textbf{vẫn READ WRITE} --- chỉ là instance
+không đăng ký được với listener.
+
+Nguyên nhân: hai file \texttt{listener.ora} và \texttt{tnsnames.ora} do bộ cài
+sinh ra dùng tên máy \texttt{AnhLD.lan}, mà tên đó không phân giải được khi máy
+đổi mạng. Đã sửa bằng cách trỏ \texttt{local\_listener} thẳng vào
+\texttt{127.0.0.1} và thay tên trong cả hai file.
+
+\methodbox{Điểm cần đưa vào phương án vận hành}{Một cơ sở dữ liệu đặt tại chỗ
+trên máy thường xuyên đổi mạng cần cấu hình listener theo \textbf{địa chỉ tuyệt
+đối}. Nếu không, mỗi lần khởi động lại là một lần hệ thống chết, và triệu chứng
+lại trông giống như cơ sở dữ liệu hỏng chứ không phải lỗi cấu hình mạng.}
+
+\clearpage
+
+% ======================= 8. KET LUAN =======================
+\section{Kết luận và khuyến nghị}
+
+\subsection{Trả lời câu hỏi đặt ra}
+
+\begin{enumerate}
+\item \textbf{Đổi sang Oracle vì hiệu năng: không nên.} Cơ sở dữ liệu chiếm
+dưới 1\% độ trễ. Ngay cả khi giả sử Oracle nhanh vô hạn, p95 của hệ thống chỉ
+giảm dưới 1\%. Thực tế đo được còn tệ hơn giả thuyết: thông lượng giảm 18\% vì
+Oracle giành tài nguyên với tầng suy luận.
+
+\item \textbf{Đổi sang Oracle vì nghiệp vụ: làm được.} Toàn bộ phần hạ tầng đã
+kiểm chứng chạy thật, 7/7 phép thử đạt, 94/94 bảng chuyển đúng, ứng dụng chạy
+được đầu-cuối với 100\% request trả về dữ liệu thật.
+
+\item \textbf{Chi phí còn lại nằm ở phương ngữ SQL, không ở hạ tầng.} Phần sửa
+mã đấu nối đã xong. Phần rủi ro là chất lượng sinh SQL của mô hình, và nó đã
+được chứng minh là xử lý được bằng cách viết lại chỉ thị.
+\end{enumerate}
+
+\subsection{Giới hạn của kết luận}
+
+\methodbox{Điều báo cáo này KHÔNG kết luận}{Số liệu đo trên \textbf{một máy duy
+nhất} vừa chạy mô hình vừa chạy cơ sở dữ liệu. Báo cáo bác bỏ phương án
+\textbf{cài Oracle lên chính máy chủ ứng dụng}, chứ \textbf{không} bác bỏ
+phương án đặt Oracle trên một \textbf{máy chủ riêng} trong mạng nội bộ --- khi
+đó vẫn giữ được lợi ích độ trễ mà không phải chia sẻ CPU với tầng suy luận.
+Nếu bên nghiệp vụ có sẵn máy chủ Oracle riêng, độ trễ kỳ vọng nằm giữa hai cột:
+tốt hơn 105 ms của Neon, kém hơn 0,5 ms của loopback.}
+
+\subsection{Việc nên làm tiếp để giảm độ trễ}
+
+Ngân sách công sức nên dồn vào tầng suy luận, nơi chiếm trên 99\% độ trễ:
+
+\begin{enumerate}
+\item dò lại \texttt{OLLAMA\_NUM\_PARALLEL} sau khi đã bật GPU tích hợp, vì
+ràng buộc bộ nhớ đã khác --- khoảng 20 phút;
+\item xác định ngưỡng an toàn của GPU tích hợp trong khoảng 30--50 người dùng
+--- khoảng 10 phút;
+\item đầu tư GPU rời hoặc chuyển sang API LLM đám mây, nếu cần đạt p95 dưới 10
+giây ở mức 30--50 người dùng. Đây là con đường duy nhất còn lại, vì mọi phương
+án cấu hình không tốn chi phí đều đã thử hết.
+\end{enumerate}
+
+\clearpage
+
+% ======================= PHU LUC =======================
+\section*{Phụ lục. Nguồn số liệu}
+\addcontentsline{toc}{section}{Phụ lục. Nguồn số liệu}
+
+Mọi con số trong báo cáo này đều tái lập được từ các file sau, có trong kho mã
+nguồn:
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{>{\ttfamily\small}p{6.6cm}X}
+\toprule
+\rowcolor{lightblue}
+\textrm{\bfseries File} & \textrm{\bfseries Nội dung}\\
+\midrule
+loadtest/nap\_du\_lieu\_oracle.py & Script chuyển dữ liệu, tự đối chiếu số dòng\\
+loadtest/kiem\_chung\_oracle.py & Bộ 7 phép thử đấu nối, tự sinh báo cáo\\
+loadtest/bao\_cao\_dau\_noi\_oracle.md & Báo cáo đấu nối do máy sinh\\
+loadtest/k6\_50\_oracle\_np4\_v2.json & Đo tải Oracle, lượt 1 (nguội)\\
+loadtest/k6\_50\_oracle\_np4\_lan2\_v2.json & Đo tải Oracle, lượt 2\\
+loadtest/k6\_50\_oracle\_np4\_lan3\_v2.json & Đo tải Oracle, lượt 3\\
+loadtest/k6\_50\_pg\_hnay\_lan1\_v2.json & Đo tải PostgreSQL, lượt 1\\
+loadtest/k6\_50\_pg\_hnay\_lan2\_v2.json & Đo tải PostgreSQL, lượt 2\\
+loadtest/k6\_50\_np4\_v2.json & Đo tải PostgreSQL, mốc gốc 05/08\\
+loadtest/k6\_50\_pg\_kem\_oracle\_v2.json & Lượt cô lập nguyên nhân\\
+phan\_tich\_doi\_sang\_oracle.md & Phân tích chi tiết kèm diễn giải\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\vspace{0.4cm}
+
+\noindent Cách chạy lại bộ kiểm chứng đấu nối:
+
+\begin{lstlisting}
+set ORACLE_USER=qlsp_backup
+set ORACLE_PASSWORD=...
+set ORACLE_DSN=localhost:1521/freepdb1
+python loadtest/kiem_chung_oracle.py
+\end{lstlisting}
+
+\noindent Cách chuyển ứng dụng giữa hai cơ sở dữ liệu: đặt biến
+\texttt{DATABASE\_BACKEND} bằng \texttt{oracle} hoặc \texttt{postgres} trong
+file \texttt{.env}.
+
+\end{document}
