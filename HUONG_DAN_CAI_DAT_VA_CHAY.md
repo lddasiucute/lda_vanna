@@ -175,12 +175,16 @@ ORACLE_DSN=localhost:1521/freepdb1
 Nạp dữ liệu sang Oracle bằng `loadtest/nap_du_lieu_oracle.py`; kiểm tra đấu nối
 bằng `loadtest/kiem_chung_oracle.py`.
 
-**Cảnh báo hiệu năng.** Đặt Oracle trên **cùng máy** với Ollama làm hệ thống
-chậm đi khoảng một nửa: đo ngày 10/08/2026 ở mức 50 người dùng cho 2,94 RPS so
-với 6,06 RPS của Neon, câu qua mô hình tăng từ 45,3 lên 87,7 giây. Lý do là
-Oracle giành CPU và RAM với tầng suy luận — nút thắt thật sự của hệ thống. Bản
-thân cơ sở dữ liệu thì nhanh hơn 6 lần (14–19 ms so với 104–110 ms), nhưng nó
-chỉ chiếm dưới 1% độ trễ. Chi tiết trong `phan_tich_doi_sang_oracle.md` Mục 4.4.
+**Cảnh báo hiệu năng.** Đặt Oracle trên **cùng máy** với Ollama là một khoản lỗ
+ròng. Đo ngày 10/08/2026 ở mức 50 người dùng, trung bình các lượt đã ấm: thông
+lượng còn 4,58 RPS so với 5,60 RPS của Neon (**82%**), câu qua mô hình tăng từ
+42,8 lên 55,3 giây (**chậm hơn 29%**). Lý do là Oracle giành CPU và RAM với tầng
+suy luận — nút thắt thật sự của hệ thống. Bản thân cơ sở dữ liệu thì nhanh hơn
+**6,4 lần** (15 ms so với 94 ms), nhưng nó chỉ chiếm dưới 1% độ trễ.
+
+Lưu ý khi tự đo lại: **lượt Oracle đầu tiên luôn tệ hơn hẳn** (2,94 RPS, 87,7
+giây) vì cache còn nguội. Phải chạy ít nhất ba lượt rồi bỏ lượt đầu, nếu không
+sẽ ra kết luận sai lệch. Chi tiết trong `phan_tich_doi_sang_oracle.md` Mục 4.4.
 
 ## 7. Chạy ứng dụng
 

@@ -21,9 +21,9 @@ xong**; hai nhóm còn lại — phương ngữ SQL và kiểm chứng thật �
 người dùng. Mọi con số Oracle trong văn bản này là số đo — chi tiết ở Mục 4.3
 và 4.4.
 
-**Kết quả đo tải đảo ngược một phần kết luận theo hướng mạnh hơn:** đặt Oracle
-trên **cùng máy** với tầng suy luận không chỉ vô ích mà còn **làm hệ thống chậm
-đi gấp đôi**, dù bản thân cơ sở dữ liệu nhanh hơn 6 lần. Xem Mục 4.4.
+**Kết quả đo tải:** đặt Oracle trên **cùng máy** với tầng suy luận là một khoản
+lỗ ròng — thông lượng còn **82%** và câu qua mô hình chậm hơn **29%**, dù bản
+thân cơ sở dữ liệu nhanh hơn 6,4 lần. Xem Mục 4.4.
 
 ---
 
@@ -213,30 +213,48 @@ Ngày 06/08/2026 đã nạp toàn bộ schema sang Oracle bằng
 đối** khi đối chiếu số dòng hai bên. Ứng dụng được cho chạy trên Oracle qua
 công tắc `DATABASE_BACKEND=oracle` rồi đo tải lại bằng đúng kịch bản k6 cũ.
 
-#### Ba lượt đo, cùng cấu hình Ollama, chỉ khác cơ sở dữ liệu
+#### Sáu lượt đo, cùng cấu hình Ollama, chỉ khác cơ sở dữ liệu
 
-Cả ba lượt đều `OLLAMA_NUM_PARALLEL=4`, GPU tích hợp tắt, 50 người dùng đồng
+Mọi lượt đều `OLLAMA_NUM_PARALLEL=4`, GPU tích hợp tắt, 50 người dùng đồng
 thời, 100% request trả về dữ liệu thật.
 
 | Lượt đo | Thông lượng | Câu chỉ chạm DB | Câu qua LLM (trung vị) |
 |---|---:|---:|---:|
-| Postgres/Neon, không có Oracle trên máy (mốc chuẩn) | 6,06 RPS | 104–110 ms | **45,3 s** |
-| Postgres/Neon, Oracle có chạy nhưng không dùng | 3,98 RPS | 146–153 ms | **54,3 s** |
-| Oracle tại chỗ phục vụ ứng dụng | 2,94 RPS | **14–19 ms** | **87,7 s** |
+| Oracle tại chỗ, lượt 1 (**nguội**) | 2,94 RPS | 16 ms | 87,7 s |
+| Oracle tại chỗ, lượt 2 | 4,13 RPS | 14 ms | 55,9 s |
+| Oracle tại chỗ, lượt 3 | 5,02 RPS | 15 ms | 54,8 s |
+| Postgres/Neon, lượt 1 (10/08) | 5,10 RPS | 98 ms | 44,0 s |
+| Postgres/Neon, lượt 2 (10/08) | 6,10 RPS | 91 ms | 41,6 s |
+| Postgres/Neon, mốc gốc (05/08) | 6,06 RPS | 105 ms | 45,3 s |
+
+**Vì sao phải đo nhiều lượt.** Bản đầu của tài liệu này kết luận "Oracle làm hệ
+thống chậm đi gấp đôi" dựa trên **đúng một lượt đo** — và lượt đó là lượt Oracle
+nguội, chưa ấm cache. Ba lượt Oracle liên tiếp cho 2,94 → 4,13 → 5,02 RPS, tức
+độ dao động giữa các lượt lớn hơn cả hiệu ứng đang muốn đo. Kết luận cũ là nói
+quá, đã sửa lại bằng số dưới đây. Mốc Postgres 05/08 tái lập được trong hôm nay
+(6,10 so với 6,06) nên bản thân mốc chuẩn vẫn dùng được.
+
+**So các lượt đã ấm** (bỏ lượt Oracle nguội đầu tiên):
+
+| Chỉ số | Oracle tại chỗ | Postgres/Neon | Chênh lệch |
+|---|---:|---:|---|
+| Thông lượng | 4,58 RPS | 5,60 RPS | Oracle bằng **82%** |
+| Câu qua LLM | 55,3 s | 42,8 s | Oracle chậm hơn **29%** |
+| Câu chỉ chạm DB | **15 ms** | 94 ms | Oracle nhanh hơn **6,4 lần** |
 
 Đọc bảng này theo hai chiều:
 
 **Chiều thứ nhất — cơ sở dữ liệu đúng là nhanh hơn hẳn.** Năm câu chỉ chạm DB
-giảm từ 104–110 ms xuống 14–19 ms, nhanh hơn khoảng **6 lần**. Đây là lợi ích
-thật của việc bỏ vòng mạng đi Singapore, đúng như Mục 2 dự đoán.
+giảm từ 94 ms xuống 15 ms. Đây là lợi ích thật của việc bỏ vòng mạng đi
+Singapore, đúng như Mục 2 dự đoán.
 
-**Chiều thứ hai — hệ thống tổng thể lại chậm đi gấp đôi.** Thông lượng rơi từ
-6,06 xuống 2,94 RPS, câu qua LLM tăng từ 45,3 lên 87,7 giây. Nguyên nhân đã
-được cô lập bằng lượt đo giữa: chỉ cần Oracle **chạy trên máy mà không phục vụ
-gì** thì thông lượng đã mất 34% và câu LLM đã chậm thêm 9 giây. Oracle giành
-CPU và RAM với llama.cpp — mà tầng suy luận mới là nút thắt.
+**Chiều thứ hai — hệ thống tổng thể vẫn lỗ.** Thông lượng còn 82%, câu qua LLM
+chậm thêm 29%. Nguyên nhân đã được cô lập bằng một lượt đo riêng: chỉ cần Oracle
+**chạy trên máy mà không phục vụ gì** thì thông lượng đã giảm và câu LLM đã chậm
+thêm — Oracle giành CPU và RAM với llama.cpp, mà tầng suy luận mới là nút thắt.
 
-Nói gọn: **làm cho 1% nhanh lên 6 lần, đổi lấy 99% chậm đi 2 lần.**
+Nói gọn: **làm cho dưới 1% nhanh lên 6 lần, đổi lấy 99% còn lại chậm đi gần một
+phần ba.** Đây là khoản lỗ nhỏ hơn bản đầu của tài liệu này nêu, nhưng vẫn là lỗ.
 
 #### Giới hạn của kết luận này
 
