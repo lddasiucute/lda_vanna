@@ -78,7 +78,12 @@ RESULTS_PATH = Path(__file__).parent / "query_results"
 # --- SQL dialect ---------------------------------------------------------
 # The deterministic SQL below and the model instructions both hard-code a
 # dialect, so the backend has to be known before either is built.
-DATABASE_BACKEND = os.getenv("DATABASE_BACKEND", "postgres").strip().lower()
+#
+# The default is oracle. Running without an Oracle instance therefore fails at
+# startup rather than silently falling back, which is deliberate: a silent
+# fallback to Neon would answer questions from a different database than the
+# one the operator configured. Set DATABASE_BACKEND=postgres to use Neon.
+DATABASE_BACKEND = os.getenv("DATABASE_BACKEND", "oracle").strip().lower()
 if DATABASE_BACKEND not in ("postgres", "oracle"):
     raise RuntimeError("DATABASE_BACKEND must be either 'postgres' or 'oracle'.")
 
@@ -1281,7 +1286,10 @@ def _build_sql_runner():
         ]
         if missing:
             raise RuntimeError(
-                "DATABASE_BACKEND=oracle requires " + ", ".join(missing) + "."
+                "DATABASE_BACKEND=oracle (the default) requires "
+                + ", ".join(missing)
+                + " in the .env file next to main.py. To use the Neon "
+                "PostgreSQL database instead, set DATABASE_BACKEND=postgres."
             )
         return OracleRunner(
             user=os.environ["ORACLE_USER"],

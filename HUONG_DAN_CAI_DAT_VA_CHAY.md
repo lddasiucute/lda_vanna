@@ -140,11 +140,47 @@ string. Điền vào `.env`:
 ```dotenv
 OLLAMA_MODEL=llama3.2
 OLLAMA_HOST=http://localhost:11434
+DATABASE_BACKEND=postgres
 DATABASE_URL=postgresql://USER:PASSWORD@HOST/neondb?sslmode=require
 ```
 
 Thay dòng `DATABASE_URL` bằng nguyên connection string Neon cung cấp.
 Không gửi file `.env`, không đưa nó vào file ZIP và không commit lên Git.
+
+### 6.1. Chọn cơ sở dữ liệu: `DATABASE_BACKEND`
+
+**Mặc định của mã nguồn là `oracle`.** Nếu bạn dùng Neon theo hướng dẫn này thì
+**bắt buộc phải có dòng `DATABASE_BACKEND=postgres`** trong `.env`, nếu không
+ứng dụng sẽ dừng ngay lúc khởi động với thông báo:
+
+```
+DATABASE_BACKEND=oracle (the default) requires ORACLE_USER, ORACLE_PASSWORD,
+ORACLE_DSN in the .env file next to main.py. To use the Neon PostgreSQL
+database instead, set DATABASE_BACKEND=postgres.
+```
+
+Ứng dụng cố tình dừng hẳn thay vì tự lùi về Neon, để không có chuyện trả lời
+người dùng bằng một cơ sở dữ liệu khác với cơ sở dữ liệu người vận hành đã cấu
+hình.
+
+Muốn dùng Oracle thì cần thêm ba dòng, và phải có sẵn một instance Oracle:
+
+```dotenv
+DATABASE_BACKEND=oracle
+ORACLE_USER=qlsp_backup
+ORACLE_PASSWORD=...
+ORACLE_DSN=localhost:1521/freepdb1
+```
+
+Nạp dữ liệu sang Oracle bằng `loadtest/nap_du_lieu_oracle.py`; kiểm tra đấu nối
+bằng `loadtest/kiem_chung_oracle.py`.
+
+**Cảnh báo hiệu năng.** Đặt Oracle trên **cùng máy** với Ollama làm hệ thống
+chậm đi khoảng một nửa: đo ngày 10/08/2026 ở mức 50 người dùng cho 2,94 RPS so
+với 6,06 RPS của Neon, câu qua mô hình tăng từ 45,3 lên 87,7 giây. Lý do là
+Oracle giành CPU và RAM với tầng suy luận — nút thắt thật sự của hệ thống. Bản
+thân cơ sở dữ liệu thì nhanh hơn 6 lần (14–19 ms so với 104–110 ms), nhưng nó
+chỉ chiếm dưới 1% độ trễ. Chi tiết trong `phan_tich_doi_sang_oracle.md` Mục 4.4.
 
 ## 7. Chạy ứng dụng
 
