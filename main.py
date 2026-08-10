@@ -50,6 +50,7 @@ from vanna.core.user import RequestContext, User, UserResolver
 from vanna.integrations.local import LocalFileSystem
 from vanna.integrations.local.agent_memory import DemoAgentMemory
 from vanna.integrations.ollama import OllamaLlmService
+from vanna.integrations.oracle import OracleRunner
 from vanna.integrations.postgres import PostgresRunner
 from vanna.servers.base import ChatHandler
 from vanna.servers.fastapi.routes import register_chat_routes
@@ -73,6 +74,52 @@ except ImportError:
 
 DB_PATH = Path(__file__).parent / "sales_dashboard.db"
 RESULTS_PATH = Path(__file__).parent / "query_results"
+
+# --- SQL dialect ---------------------------------------------------------
+# The deterministic SQL below and the model instructions both hard-code a
+# dialect, so the backend has to be known before either is built.
+DATABASE_BACKEND = os.getenv("DATABASE_BACKEND", "postgres").strip().lower()
+if DATABASE_BACKEND not in ("postgres", "oracle"):
+    raise RuntimeError("DATABASE_BACKEND must be either 'postgres' or 'oracle'.")
+
+IS_ORACLE = DATABASE_BACKEND == "oracle"
+
+
+def _limit(n: int) -> str:
+    """Row-limiting clause. Oracle has no LIMIT; it uses the SQL standard form."""
+    return f"FETCH FIRST {n} ROWS ONLY" if IS_ORACLE else f"LIMIT {n}"
+
+
+def _as(table: str, alias: str) -> str:
+    """Table alias. Oracle rejects AS before one (ORA-00933); Postgres allows both."""
+    return f"{table} {alias}" if IS_ORACLE else f"{table} AS {alias}"
+
+
+_ORACLE_RULES = """
+CRITICAL SQL DIALECT — Oracle, not PostgreSQL or MySQL:
+- To return only the first N rows write: ORDER BY ... FETCH FIRST N ROWS ONLY.
+  The keyword LIMIT does not exist in Oracle and raises ORA-03049. Never write
+  LIMIT. Never write OFFSET n LIMIT m.
+  WRONG: SELECT code FROM qlsp_backup.units ORDER BY id LIMIT 5
+  RIGHT: SELECT code FROM qlsp_backup.units ORDER BY id FETCH FIRST 5 ROWS ONLY
+- Never write AS before a table alias (ORA-00933):
+  WRONG: FROM qlsp_backup.units AS u     RIGHT: FROM qlsp_backup.units u
+  AS before a column alias is correct and expected.
+- Concatenate with ||. Use NVL, not COALESCE-only PostgreSQL idioms.
+- Do not end the statement with a semicolon.
+"""
+
+
+def _apply_dialect(prompt: str) -> str:
+    """Fill the dialect-dependent placeholders in the system prompt."""
+    return (
+        prompt.replace("__ENGINE__", "Oracle" if IS_ORACLE else "PostgreSQL")
+        .replace(
+            "__SCHEMA_CATALOG__",
+            "all_tab_columns" if IS_ORACLE else "information_schema.columns",
+        )
+        .replace("__DIALECT_RULES__", _ORACLE_RULES if IS_ORACLE else "")
+    )
 
 app = FastAPI()
 
@@ -396,32 +443,32 @@ ORDER BY total_tickets DESC, muc_uu_tien
             and contains("người dùng", "nguoi dung", "users")
             and contains("nhiều", "nhieu", "top")
         ):
-            sql = """
+            sql = f"""
 SELECT
     u.code,
     u.name,
     COUNT(us.id) AS total_users
-FROM qlsp_backup.units AS u
-LEFT JOIN qlsp_backup.users AS us ON us.unit_id = u.id
+FROM {_as("qlsp_backup.units", "u")}
+LEFT JOIN {_as("qlsp_backup.users", "us")} ON us.unit_id = u.id
 GROUP BY u.id, u.code, u.name
 ORDER BY total_users DESC, u.code
-LIMIT 10
+{_limit(10)}
 """.strip()
         elif (
             contains("danh mục", "danh muc", "spdv")
             and contains("ticket")
             and contains("nhiều", "nhieu", "top")
         ):
-            sql = """
+            sql = f"""
 SELECT
     c.code,
     c.name,
     COUNT(t.id) AS total_tickets
-FROM qlsp_backup.spdv_categories AS c
-LEFT JOIN qlsp_backup.spdv_tickets AS t ON t.spdv_id = c.id
+FROM {_as("qlsp_backup.spdv_categories", "c")}
+LEFT JOIN {_as("qlsp_backup.spdv_tickets", "t")} ON t.spdv_id = c.id
 GROUP BY c.id, c.code, c.name
 ORDER BY total_tickets DESC, c.code
-LIMIT 10
+{_limit(10)}
 """.strip()
         elif (
             contains("ticket")
@@ -490,8 +537,65 @@ ORDER BY month
             for message in request.messages[user_index + 1 :]
         )
 
+    # RunSqlTool puts one of these in every successful result. Their absence is
+    # the only reliable failure signal here: the tool reports errors in its
+    # message rather than raising, and the framework strips the tool's
+    # "Error executing query: " prefix before the message reaches us.
+    _sql_success_markers = (
+        "Results saved to file:",
+        "Query executed successfully.",
+    )
+
     @staticmethod
-    def _tool_finished_message() -> str:
+    def _failed_tool_error(request: LlmRequest) -> str | None:
+        """Error text of the most recent run_sql call, or None if it succeeded.
+
+        Without this check a query that errored still receives the cheerful
+        completion message below. That is how a completely broken SQL layer
+        managed to look identical to a healthy one, both to the user and to
+        any load test that only checks the stream reached [DONE].
+        """
+        user_index, _ = ChartAwareOllamaLlmService._latest_user(request)
+        if user_index < 0:
+            return None
+
+        tail = request.messages[user_index + 1 :]
+        for position in range(len(tail) - 1, -1, -1):
+            message = tail[position]
+            if message.role != "tool":
+                continue
+            # Only run_sql failures are worth reporting as a data problem, so
+            # resolve the call id back to the tool that produced it.
+            name = None
+            for earlier in reversed(tail[:position]):
+                for call in earlier.tool_calls or []:
+                    if call.id == message.tool_call_id:
+                        name = call.name
+                        break
+                if name:
+                    break
+            if name not in (None, "run_sql"):
+                return None
+
+            content = (message.content or "").strip()
+            if any(m in content for m in ChartAwareOllamaLlmService._sql_success_markers):
+                return None
+            return content or None
+        return None
+
+    @staticmethod
+    def _tool_finished_message(request: LlmRequest | None = None) -> str:
+        error = (
+            ChartAwareOllamaLlmService._failed_tool_error(request)
+            if request is not None
+            else None
+        )
+        if error:
+            detail = error.splitlines()[0].removeprefix("Error executing query: ").strip()
+            return (
+                "Truy vấn không chạy được nên không có dữ liệu để hiển thị. "
+                f"Lỗi từ cơ sở dữ liệu: {detail}"
+            )
         return (
             "Đã hoàn tất truy vấn. Kết quả chính xác được hiển thị "
             "trong bảng phía trên."
@@ -709,13 +813,13 @@ ORDER BY return_rate_pct DESC
             return LlmResponse(tool_calls=[chart_call], finish_reason="tool_calls")
         if self._has_tool_result(request):
             return LlmResponse(
-                content=self._tool_finished_message(),
+                content=self._tool_finished_message(request),
                 finish_reason="stop",
             )
         response = await super().send_request(request)
         if response.is_tool_call() and self._has_tool_result(request):
             return LlmResponse(
-                content=self._tool_finished_message(),
+                content=self._tool_finished_message(request),
                 finish_reason="stop",
                 usage=response.usage,
             )
@@ -723,7 +827,7 @@ ORDER BY return_rate_pct DESC
         if text_tool_call:
             if self._has_tool_result(request):
                 return LlmResponse(
-                    content=self._tool_finished_message(),
+                    content=self._tool_finished_message(request),
                     finish_reason="stop",
                     usage=response.usage,
                 )
@@ -780,7 +884,7 @@ ORDER BY return_rate_pct DESC
             )
             return
         if self._has_tool_result(request):
-            yield LlmStreamChunk(content=self._tool_finished_message())
+            yield LlmStreamChunk(content=self._tool_finished_message(request))
             yield LlmStreamChunk(finish_reason="stop")
             return
 
@@ -797,7 +901,7 @@ ORDER BY return_rate_pct DESC
 
         if accumulated_tool_calls:
             if self._has_tool_result(request):
-                yield LlmStreamChunk(content=self._tool_finished_message())
+                yield LlmStreamChunk(content=self._tool_finished_message(request))
                 yield LlmStreamChunk(finish_reason="stop")
                 return
             yield LlmStreamChunk(
@@ -809,7 +913,7 @@ ORDER BY return_rate_pct DESC
         text_tool_call = self._text_tool_call(request, accumulated_content)
         if text_tool_call:
             if self._has_tool_result(request):
-                yield LlmStreamChunk(content=self._tool_finished_message())
+                yield LlmStreamChunk(content=self._tool_finished_message(request))
                 yield LlmStreamChunk(finish_reason="stop")
                 return
             yield LlmStreamChunk(
@@ -847,6 +951,16 @@ class TrackingRunSqlTool(RunSqlTool):
         simple = getattr(result.ui_component, "simple_component", None)
         if simple is not None and hasattr(simple, "text"):
             simple.text = f"{simple.text}\n\n{timing_note}"
+
+        # A failed query still streams a complete, cheerful answer, so without
+        # this line a broken SQL layer looks identical to a healthy one in the
+        # logs and in any load test that only checks for [DONE].
+        if not result.success:
+            print(
+                f"run_sql THAT BAI: {result.result_for_llm[:600]}\n"
+                f"  SQL: {getattr(args, 'sql', '?')}",
+                flush=True,
+            )
 
         output_file = result.metadata.get("output_file")
         if result.success and output_file:
@@ -1114,7 +1228,7 @@ def seed_database() -> None:
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
+if not DATABASE_URL and not IS_ORACLE:
     raise RuntimeError(
         "DATABASE_URL is not set. Add the Neon connection string to the "
         ".env file next to main.py."
@@ -1145,7 +1259,50 @@ def _database_url_with_schema(database_url: str, schema: str) -> str:
     )
 
 
-DATABASE_URL = _database_url_with_schema(DATABASE_URL, DATABASE_SCHEMA)
+if DATABASE_URL:
+    DATABASE_URL = _database_url_with_schema(DATABASE_URL, DATABASE_SCHEMA)
+
+
+def _build_sql_runner():
+    """Pick the runner for the configured backend.
+
+    Both pool sizes and both timeouts are read from the same environment
+    variables so a load test measures the two backends under one configuration.
+    """
+    pool_min = int(os.getenv("DB_POOL_MIN", "4"))
+    pool_max = int(os.getenv("DB_POOL_MAX", "16"))
+    timeout_ms = int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "20000"))
+
+    if IS_ORACLE:
+        missing = [
+            name
+            for name in ("ORACLE_USER", "ORACLE_PASSWORD", "ORACLE_DSN")
+            if not os.getenv(name)
+        ]
+        if missing:
+            raise RuntimeError(
+                "DATABASE_BACKEND=oracle requires " + ", ".join(missing) + "."
+            )
+        return OracleRunner(
+            user=os.environ["ORACLE_USER"],
+            password=os.environ["ORACLE_PASSWORD"],
+            dsn=os.environ["ORACLE_DSN"],
+            min_connections=pool_min,
+            max_connections=pool_max,
+            # Oracle has no server-side statement_timeout; this is the closest
+            # equivalent and is enforced client-side per round trip.
+            call_timeout_ms=timeout_ms,
+            current_schema=DATABASE_SCHEMA,
+        )
+
+    return PostgresRunner(
+        connection_string=DATABASE_URL,
+        # Reuse warm connections: a fresh TLS handshake to Neon costs more
+        # than the analytical queries themselves.
+        min_connections=pool_min,
+        max_connections=pool_max,
+        statement_timeout_ms=timeout_ms,
+    )
 
 llm = ChartAwareOllamaLlmService(
     model=os.getenv("OLLAMA_MODEL", "llama3.2"),
@@ -1166,14 +1323,7 @@ latest_result_files: dict[tuple[str, str], str] = {}
 tools = ToolRegistry()
 tools.register_local_tool(
     TrackingRunSqlTool(
-        sql_runner=PostgresRunner(
-            connection_string=DATABASE_URL,
-            # Reuse warm connections: a fresh TLS handshake to Neon costs more
-            # than the analytical queries themselves.
-            min_connections=int(os.getenv("DB_POOL_MIN", "4")),
-            max_connections=int(os.getenv("DB_POOL_MAX", "16")),
-            statement_timeout_ms=int(os.getenv("DB_STATEMENT_TIMEOUT_MS", "20000")),
-        ),
+        sql_runner=_build_sql_runner(),
         file_system=file_system,
         latest_files=latest_result_files,
     ),
@@ -1198,10 +1348,11 @@ agent = Agent(
         temperature=0.0,
     ),
     system_prompt_builder=DefaultSystemPromptBuilder(
-        base_prompt="""
-You are a Vietnamese data analyst for a PostgreSQL database containing the
+        base_prompt=_apply_dialect("""
+You are a Vietnamese data analyst for a __ENGINE__ database containing the
 VNPT QLSP/SPDV operational backup. Answer in the user's language and keep the
 answer concise.
+__DIALECT_RULES__
 
 Database scope:
 - The active schema is qlsp_backup, containing 94 imported tables and 11,687
@@ -1267,7 +1418,7 @@ Rules:
 2. Never call the same tool again after a successful result.
 3. Use only SELECT or WITH queries. Never modify data or database objects.
 4. Never invent table or column names. If the requested schema is unknown,
-   query information_schema.columns and present that schema result only.
+   query __SCHEMA_CATALOG__ and present that schema result only.
 5. Do not select password_hash, reset_password_token, OTP values or other
    authentication secrets.
 6. For a chart, call run_sql once with compact aggregated data, then call
@@ -1282,7 +1433,7 @@ SELECT
   (SELECT COUNT(*) FROM qlsp_backup.users) AS total_users,
   (SELECT COUNT(*) FROM qlsp_backup.units) AS total_units,
   (SELECT COUNT(*) FROM qlsp_backup.spdv_tickets) AS total_spdv_tickets;
-""".strip()
+""".strip())
     ),
 )
 

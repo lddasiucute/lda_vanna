@@ -15,10 +15,15 @@ bắt buộc dùng Oracle): làm được, nhưng phải sửa ba nhóm việc t
 2–3 ngày công. Chi tiết ở Mục 4. Nhóm việc thứ nhất (tầng đấu nối) **đã làm
 xong**; hai nhóm còn lại — phương ngữ SQL và kiểm chứng thật — vẫn còn nguyên.
 
-**Trạng thái kiểm chứng:** đã đấu nối máy chủ Oracle thật. Oracle AI Database
-26ai Free 23.26.2.0.0 được cài trên máy kiểm thử ngày 06/08/2026, bộ kiểm chứng
-chạy **7/7 phép thử đạt**. Mọi con số Oracle trong văn bản này giờ là số đo,
-không còn là suy luận — chi tiết ở Mục 4.3.
+**Trạng thái kiểm chứng:** đã chạy thật đầu-cuối. Oracle AI Database 26ai Free
+23.26.2.0.0 được cài trên máy kiểm thử ngày 06/08/2026, toàn bộ 94 bảng và
+11.687 dòng đã nạp sang, ứng dụng đã chạy trên Oracle và đo tải lại ở mức 50
+người dùng. Mọi con số Oracle trong văn bản này là số đo — chi tiết ở Mục 4.3
+và 4.4.
+
+**Kết quả đo tải đảo ngược một phần kết luận theo hướng mạnh hơn:** đặt Oracle
+trên **cùng máy** với tầng suy luận không chỉ vô ích mà còn **làm hệ thống chậm
+đi gấp đôi**, dù bản thân cơ sở dữ liệu nhanh hơn 6 lần. Xem Mục 4.4.
 
 ---
 
@@ -157,8 +162,10 @@ Mã nguồn và chỉ thị cho mô hình đang gắn chặt với PostgreSQL. B
 |---|---|---|
 | `main.py` dòng 408, 424 | `LIMIT 10` — Oracle dùng `FETCH FIRST 10 ROWS ONLY` | `LIMIT` trả `ORA-03047`; `FETCH FIRST` chạy được |
 | `main.py` dòng 1270 | Chỉ thị bảo mô hình truy vấn `information_schema.columns` — Oracle không có, phải đổi sang `ALL_TAB_COLUMNS` | `information_schema.columns` trả `ORA-00942`; `ALL_TAB_COLUMNS` chạy được |
-| `main.py`, 21 vị trí | Tên bảng gắn tiền tố schema `qlsp_backup.` | chưa đo — cần dữ liệu thật trên Oracle |
+| `main.py`, 21 vị trí | Tên bảng gắn tiền tố schema `qlsp_backup.` | chạy được sau khi tạo user `QLSP_BACKUP` làm schema đích |
 | `main.py` dòng 1127–1145 | Hàm đặt `search_path` qua tham số khởi động — Oracle dùng `ALTER SESSION SET CURRENT_SCHEMA` | `ALTER SESSION SET CURRENT_SCHEMA` chạy được |
+| `main.py` dòng 404–405, 420–421 | **Không có trong bản phân tích đầu.** `FROM ... AS u` — Oracle cấm `AS` trước bí danh **bảng** | `AS u` trả `ORA-03048`; bỏ `AS` thì chạy. `AS` trước bí danh **cột** vẫn hợp lệ |
+| `main.py` dòng 336–343 | `SELECT` các truy vấn con đếm, không có `FROM` | chạy được — Oracle 23ai trở đi cho phép `SELECT` không `FROM` |
 
 Ngoài ra prompt hệ thống đang dạy mô hình sinh SQL theo cú pháp PostgreSQL. Đổi
 sang Oracle nghĩa là phải viết lại phần chỉ thị này và **kiểm thử lại chất lượng
@@ -199,10 +206,99 @@ Phép thử số 3 đã được kiểm chứng ngược để chắc nó không
 **1.990 ms**, kiểu `run_in_executor` của bản mới cho **6,6 ms** — ngưỡng 200 ms
 nằm gọn giữa hai giá trị. Số đo thật trên Oracle (6,4 ms) khớp với vế sau.
 
-**Còn lại:** bộ kiểm chứng chạy trên schema trống. Bước tiếp theo là nạp dữ liệu
-`qlsp_backup` sang Oracle rồi chạy lại bộ kiểm thử tải (`loadtest/`) để xác nhận
-không hồi quy — bộ kiểm thử đã được siết để bắt buộc kiểm tra dữ liệu trả về,
-nên sẽ phát hiện được lỗi kiểu "trả lời rỗng nhưng vẫn báo thành công".
+### 4.4. Nạp dữ liệu và đo tải thật — ĐÃ LÀM, và kết quả gây bất ngờ
+
+Ngày 06/08/2026 đã nạp toàn bộ schema sang Oracle bằng
+`loadtest/nap_du_lieu_oracle.py`: **94/94 bảng, 11.687/11.687 dòng, khớp tuyệt
+đối** khi đối chiếu số dòng hai bên. Ứng dụng được cho chạy trên Oracle qua
+công tắc `DATABASE_BACKEND=oracle` rồi đo tải lại bằng đúng kịch bản k6 cũ.
+
+#### Ba lượt đo, cùng cấu hình Ollama, chỉ khác cơ sở dữ liệu
+
+Cả ba lượt đều `OLLAMA_NUM_PARALLEL=4`, GPU tích hợp tắt, 50 người dùng đồng
+thời, 100% request trả về dữ liệu thật.
+
+| Lượt đo | Thông lượng | Câu chỉ chạm DB | Câu qua LLM (trung vị) |
+|---|---:|---:|---:|
+| Postgres/Neon, không có Oracle trên máy (mốc chuẩn) | 6,06 RPS | 104–110 ms | **45,3 s** |
+| Postgres/Neon, Oracle có chạy nhưng không dùng | 3,98 RPS | 146–153 ms | **54,3 s** |
+| Oracle tại chỗ phục vụ ứng dụng | 2,94 RPS | **14–19 ms** | **87,7 s** |
+
+Đọc bảng này theo hai chiều:
+
+**Chiều thứ nhất — cơ sở dữ liệu đúng là nhanh hơn hẳn.** Năm câu chỉ chạm DB
+giảm từ 104–110 ms xuống 14–19 ms, nhanh hơn khoảng **6 lần**. Đây là lợi ích
+thật của việc bỏ vòng mạng đi Singapore, đúng như Mục 2 dự đoán.
+
+**Chiều thứ hai — hệ thống tổng thể lại chậm đi gấp đôi.** Thông lượng rơi từ
+6,06 xuống 2,94 RPS, câu qua LLM tăng từ 45,3 lên 87,7 giây. Nguyên nhân đã
+được cô lập bằng lượt đo giữa: chỉ cần Oracle **chạy trên máy mà không phục vụ
+gì** thì thông lượng đã mất 34% và câu LLM đã chậm thêm 9 giây. Oracle giành
+CPU và RAM với llama.cpp — mà tầng suy luận mới là nút thắt.
+
+Nói gọn: **làm cho 1% nhanh lên 6 lần, đổi lấy 99% chậm đi 2 lần.**
+
+#### Giới hạn của kết luận này
+
+Con số trên đo trên **một máy duy nhất** vừa chạy mô hình vừa chạy cơ sở dữ
+liệu. Nó bác bỏ phương án "cài Oracle lên chính máy chủ ứng dụng", chứ không
+bác bỏ phương án đặt Oracle trên **một máy chủ riêng trong mạng nội bộ** — khi
+đó vẫn giữ được lợi ích độ trễ mà không phải chia sẻ CPU với tầng suy luận. Nếu
+bên nghiệp vụ có sẵn máy chủ Oracle riêng, độ trễ kỳ vọng nằm giữa hai cột:
+tốt hơn 105 ms của Neon, kém hơn 0,5 ms của loopback.
+
+#### Một phát hiện nữa: mô hình phớt lờ chỉ thị phương ngữ
+
+Lượt chạy thử đầu tiên trên Oracle, năm câu khớp mẫu chạy tốt nhưng **câu duy
+nhất đi qua mô hình thì hỏng**: `llama3.2` 3B sinh ra
+`... ORDER BY id LIMIT 5`, Oracle trả `ORA-03049`. Chỉ thị Oracle lúc đó nằm ở
+mục 9, cuối prompt hệ thống. Chuyển nguyên khối chỉ thị đó lên **ngay đầu
+prompt**, kèm ví dụ SAI/ĐÚNG cụ thể, thì mô hình tuân thủ và cả 6/6 câu đều
+chạy. Đây đúng là rủi ro Mục 4.2 đã cảnh báo, và nó có thật — nhưng sửa được
+bằng cách viết lại chỉ thị, không cần đổi mô hình.
+
+Đáng chú ý hơn: lỗi này **không hiện ra ở tầng ứng dụng**. Stream vẫn kết thúc
+bình thường và vẫn trả lời "Đã hoàn tất truy vấn. Kết quả chính xác được hiển
+thị trong bảng phía trên." dù không có bảng nào. Đây là lỗi của chính ứng dụng,
+không phải của Oracle, và đã được sửa:
+
+- ghi log mỗi khi `run_sql` thất bại, kèm câu SQL — trước đó một tầng SQL hỏng
+  hoàn toàn trông giống hệt một tầng khoẻ mạnh trong log;
+- thông điệp trả về người dùng nay nói thật: *"Truy vấn không chạy được nên
+  không có dữ liệu để hiển thị. Lỗi từ cơ sở dữ liệu: …"*.
+
+Chỗ khó của việc sửa: `RunSqlTool` báo lỗi bằng nội dung message chứ không ném
+ngoại lệ, **và** framework cắt mất tiền tố `Error executing query:` trước khi
+message đến tầng gọi. Nên không thể nhận diện thất bại bằng cách tìm dấu hiệu
+lỗi; phải làm ngược lại — coi là thất bại khi **thiếu** dấu hiệu thành công
+(`Results saved to file:` hoặc `Query executed successfully.`), và chỉ xét đúng
+tool `run_sql` bằng cách tra `tool_call_id` ngược về tên tool, để không báo nhầm
+cho tool vẽ biểu đồ. Đã kiểm chứng hai chiều: DSN hỏng thì báo lỗi thật, DSN tốt
+thì 6/6 câu chạy và không có báo lỗi giả.
+
+#### Một bẫy vận hành: Oracle không tự phục hồi sau khi khởi động lại máy
+
+Sau lần khởi động lại máy, ứng dụng chết hoàn toàn với
+`DPY-6001: Service "freepdb1" is not registered with the listener`. Chẩn đoán:
+instance **vẫn OPEN** và PDB **vẫn READ WRITE** — chỉ là instance không đăng ký
+được với listener, nên `lsnrctl status` báo *"The listener supports no services"*.
+
+Nguyên nhân: `listener.ora` và `tnsnames.ora` do bộ cài sinh ra dùng
+`HOST = AnhLD.lan`, mà tên đó **không phân giải được** khi máy đổi mạng. Đã sửa
+bằng cách trỏ `local_listener` thẳng vào `127.0.0.1` (`SCOPE=BOTH`) và thay
+`AnhLD.lan` bằng `127.0.0.1` trong cả hai file `.ora`.
+
+Đây là điểm cần đưa vào báo cáo đấu nối: một cơ sở dữ liệu đặt tại chỗ trên máy
+đổi mạng thường xuyên cần cấu hình listener theo địa chỉ tuyệt đối, nếu không
+thì mỗi lần khởi động lại là một lần hệ thống chết.
+
+#### Nguồn số liệu
+
+`loadtest/k6_50_np4_v2.json` (mốc chuẩn Postgres),
+`loadtest/k6_50_pg_kem_oracle_v2.json` (đối chứng),
+`loadtest/k6_50_oracle_np4_v2.json` (Oracle),
+`loadtest/k6_50_oracle_v2.json` (Oracle kèm GPU tích hợp, 9,12 RPS — không so
+trực tiếp được vì mốc chuẩn tắt GPU tích hợp).
 
 ---
 
