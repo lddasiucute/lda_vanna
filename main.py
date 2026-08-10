@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import unicodedata
 import uuid
 from datetime import date, timedelta
 from pathlib import Path
@@ -646,84 +647,91 @@ ORDER BY month
             )
         return None
 
+    # Viết không dấu, một biến thể duy nhất cho mỗi từ. `_fold` bỏ dấu trước khi
+    # so khớp, nên không phải liệt kê đôi "đơn vị"/"don vi" như trước — cách cũ
+    # rất dễ sót một vế, và đã sót thật ("doanh thu" có, "doanh số" thì không).
+    #
+    # Từ đơn và cụm hai từ để riêng: gộp chung rồi `split()` sẽ vỡ "ke hoach"
+    # thành "ke", khiến "kể cho tôi một câu chuyện" bị nhận là hỏi dữ liệu.
+    _data_words = frozenset(
+        """
+        database sql oracle postgres schema select
+        bang cot dem tong tim top ticket spdv qlsp user wiki sla
+        """.split()
+    )
+
+    _data_phrases = frozenset(
+        {
+            "du lieu", "ban ghi", "truy van", "thong ke", "thong tin",
+            "trung binh", "lon nhat", "nho nhat", "cao nhat", "thap nhat",
+            "liet ke", "danh sach", "kiem tra", "phan tich", "bieu do",
+            "do thi", "xep hang", "bao nhieu", "ty le", "phan tram",
+            "nguoi dung", "tai khoan", "don vi", "phong ban", "hoat dong",
+            "ke hoach", "tai lieu", "bao cao", "chuong trinh",
+            "trang thai", "uu tien", "doanh thu", "doanh so", "chi phi",
+        }
+    )
+
+    # Bỏ dấu làm vài từ dữ liệu trùng với từ thường: "bảng" và "bằng" đều
+    # thành "bang", "tổng" và "tổng thống" đều bắt đầu bằng "tong". Các cụm
+    # dưới đây là cách dùng KHÔNG phải dữ liệu và được ưu tiên hơn.
+    _not_data_phrases = frozenset(
+        {"tong thong", "bang may", "bang nhau", "bang cap", "ngang bang"}
+    )
+
+    _greeting_terms = frozenset("chao hello hi hey alo".split())
+
+    _thanks_terms = frozenset("cam on thanks thank tks tk".split())
+
+    @staticmethod
+    def _fold(text: str) -> str:
+        """Hạ chữ thường, bỏ dấu tiếng Việt và dấu câu.
+
+        Nhờ bước này mà danh sách từ khoá chỉ cần một biến thể không dấu, và
+        việc so khớp theo ranh giới từ mới đúng — cách cũ dùng ``"bang "`` kèm
+        dấu cách nên trượt hẳn khi từ đó đứng cuối câu.
+        """
+        folded = unicodedata.normalize("NFD", text.casefold())
+        folded = "".join(c for c in folded if unicodedata.category(c) != "Mn")
+        folded = folded.replace("đ", "d")  # đ không tách được bằng NFD
+        return re.sub(r"[^a-z0-9]+", " ", folded).strip()
+
     def _off_topic_message(self, request: LlmRequest) -> str | None:
         """Keep unrelated chat from replaying the previous SQL tool call."""
         user_index, user_text = self._latest_user(request)
         if user_index < 0 or self._has_tool_result(request):
             return None
 
-        normalized = user_text.casefold().strip()
+        normalized = self._fold(user_text)
         if not normalized:
             return None
 
-        data_terms = (
-            "dữ liệu",
-            "du lieu",
-            "database",
-            "postgres",
-            "sql",
-            "bảng",
-            "bang ",
-            "cột",
-            "cot ",
-            "thống kê",
-            "thong ke",
-            "đếm",
-            "dem ",
-            "tổng",
-            "tong ",
-            "trung bình",
-            "trung binh",
-            "liệt kê",
-            "liet ke",
-            "danh sách",
-            "danh sach",
-            "tìm",
-            "tim ",
-            "kiểm tra",
-            "kiem tra",
-            "phân tích",
-            "phan tich",
-            "biểu đồ",
-            "bieu do",
-            "ticket",
-            "spdv",
-            "người dùng",
-            "nguoi dung",
-            "user",
-            "đơn vị",
-            "don vi",
-            "kế hoạch",
-            "ke hoach",
-            "tài liệu",
-            "tai lieu",
-            "wiki",
-            "báo cáo",
-            "bao cao",
-            "chương trình",
-            "chuong trinh",
-            "trạng thái",
-            "trang thai",
-            "ưu tiên",
-            "uu tien",
-            "doanh thu",
-            "chi phí",
-            "chi phi",
-            "sla",
-            "qlsp",
-        )
-        if any(term in normalized for term in data_terms):
+        words = normalized.split()
+        word_set = set(words)
+        pairs = {f"{a} {b}" for a, b in zip(words, words[1:])}
+
+        if not pairs & self._not_data_phrases and (
+            word_set & self._data_words or pairs & self._data_phrases
+        ):
             return None
 
-        if normalized in {"chào", "chao", "hello", "hi", "xin chào", "xin chao"}:
+        engine = "Oracle" if IS_ORACLE else "PostgreSQL"
+
+        if word_set & self._greeting_terms:
             return (
-                "Chào bạn! Tôi hỗ trợ truy vấn và phân tích dữ liệu QLSP/SPDV "
-                "trên PostgreSQL."
+                f"Chào bạn! Tôi hỗ trợ truy vấn và phân tích dữ liệu QLSP/SPDV "
+                f"trên {engine}. Bạn có thể hỏi về người dùng, đơn vị, ticket, "
+                f"kế hoạch, SPDV hoặc báo cáo."
             )
+
+        if word_set & self._thanks_terms:
+            return "Không có gì! Bạn cần tra cứu thêm dữ liệu nào nữa không?"
+
         return (
-            "Câu hỏi này nằm ngoài phạm vi phân tích dữ liệu QLSP/SPDV. "
-            "Tôi không đánh giá cá nhân; bạn có thể hỏi về người dùng, đơn vị, "
-            "ticket, kế hoạch, SPDV hoặc báo cáo trong cơ sở dữ liệu."
+            f"Câu hỏi này nằm ngoài phạm vi phân tích dữ liệu QLSP/SPDV. "
+            f"Tôi không đánh giá cá nhân và không trả lời ngoài dữ liệu trong "
+            f"cơ sở dữ liệu {engine}; bạn có thể hỏi về người dùng, đơn vị, "
+            f"ticket, kế hoạch, SPDV hoặc báo cáo."
         )
 
     def _return_rate_tool_call(self, request: LlmRequest) -> ToolCall | None:
