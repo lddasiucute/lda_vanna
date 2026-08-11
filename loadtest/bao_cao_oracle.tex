@@ -591,6 +591,76 @@ Hai dòng \texttt{ORA-03048} và \texttt{SELECT} không \texttt{FROM}
 
 \clearpage
 
+% ======================= 6b. GIOI HAN TEXT-TO-SQL =======================
+\section{Kiểm thử Text-to-SQL trên truy vấn JOIN nhiều bảng}
+\label{sec:join}
+
+\methodbox{Điều bộ kiểm thử tải KHÔNG chứng minh được}{%
+Sáu câu hỏi của bộ kiểm thử tải đều là \texttt{COUNT(*)} trên \textbf{một
+bảng}. Chúng chứng minh \textbf{đấu nối được}, chứ không chứng minh
+\textbf{sinh SQL đúng}. Mục này bổ sung phần còn thiếu đó.}
+
+Bộ kiểm thử \fpath{loadtest/thu_join_nhieu_bang.py} gồm 8 câu hỏi cần JOIN 2--3
+bảng. Mỗi câu có một đáp án đúng do chính script tính bằng SQL viết tay, sau đó
+mới hỏi ứng dụng và so hai bên. Một câu chạy được nhưng ra số sai vẫn tính là
+hỏng.
+
+\begin{table}[H]
+\centering
+\caption{Kết quả trên truy vấn JOIN nhiều bảng, cùng bộ câu hỏi cho hai CSDL}
+\label{tab:join}
+\begin{tabular}{@{}L{8.4cm}cc@{}}
+\toprule
+\rowcolor{lightblue}
+Tiêu chí & Oracle & PostgreSQL\\
+\midrule
+Có bảng trả về (tiêu chí cũ) & 7/8 & 8/8\\
+\textbf{Trả lời đúng câu được hỏi} & \bad{1/8} & \bad{1/8}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Hai cơ sở dữ liệu cho kết quả giống hệt nhau, nên đây không phải lỗi
+của Oracle.} Đây là khiếm khuyết sẵn có của ứng dụng, chỉ là chưa ai đo nên
+chưa lộ ra.
+
+\subsection{Ba nguyên nhân}
+
+\begin{enumerate}
+\item \textbf{Bộ khớp mẫu cướp đường câu hỏi --- 5/8 câu.} Hàm
+\texttt{\_known\_counts\_tool\_call} trong \texttt{main.py} thấy chữ ``có bao
+nhiêu'' là sinh thẳng một câu đếm đóng sẵn gồm nhiều bảng không liên quan,
+\textbf{không hề gọi mô hình}. Nhận ra được vì các câu này trả lời trong
+0,0--0,1 giây. Người dùng hỏi ``bao nhiêu đơn vị \emph{không có} người dùng
+nào'' (đáp án đúng: 2) thì nhận về tổng số người dùng là 2.580.
+
+\item \textbf{Mô hình 3B sinh SQL sai khi phải JOIN --- 1/8 câu.} Câu duy nhất
+thoát được bộ khớp mẫu và cần \texttt{GROUP BY} thì sinh ra
+\texttt{SELECT u.full\_name, u.unit\_id, COUNT(*) \dots{} GROUP BY u.unit\_id},
+Oracle trả \texttt{ORA-00979}.
+
+\item \textbf{Chỉ 1/8 câu thật sự đúng:} một JOIN hai bảng kèm \texttt{SUM},
+ra đúng 1.174.446.607.589.
+\end{enumerate}
+
+\subsection{Một cái bẫy dữ liệu}
+
+Cột \texttt{plan\_items.doanh\_thu\_du\_kien} nghe như số tiền nhưng là
+\texttt{VARCHAR2} chứa văn bản mô tả (``Tiết kiệm 20\% thời gian xử lý''). Bất
+kỳ ai --- người hay mô hình --- thử \texttt{SUM} lên cột đó đều nhận
+\texttt{ORA-01722}. Cột số thật là \texttt{estimated\_cost}.
+
+\subsection{Hệ quả cho phương án chuyển đổi}
+
+\methodbox{Việc phải làm dù ở lại hay chuyển đi}{%
+Phần rủi ro về chất lượng sinh SQL không những có thật mà còn lớn hơn dự đoán,
+và nó \textbf{không liên quan tới việc đổi cơ sở dữ liệu}. Sửa nó là việc
+riêng, phải làm dù ở lại PostgreSQL hay chuyển sang Oracle: thu hẹp bộ khớp mẫu
+để nó không nuốt các câu hỏi phức tạp, và dùng mô hình mạnh hơn cho nhánh sinh
+SQL.}
+
+\clearpage
+
 % ======================= 7. LOI PHAT HIEN =======================
 \section{Các lỗi phát hiện trong quá trình thực hiện}
 \label{sec:loi}
@@ -663,13 +733,15 @@ dưới 1\% độ trễ. Ngay cả khi giả sử Oracle nhanh vô hạn, p95 c�
 giảm dưới 1\%. Thực tế đo được còn tệ hơn giả thuyết: thông lượng giảm 18\% vì
 Oracle giành tài nguyên với tầng suy luận.
 
-\item \textbf{Đổi sang Oracle vì nghiệp vụ: làm được.} Toàn bộ phần hạ tầng đã
-kiểm chứng chạy thật, 7/7 phép thử đạt, 94/94 bảng chuyển đúng, ứng dụng chạy
-được đầu-cuối với 100\% request trả về dữ liệu thật.
+\item \textbf{Đổi sang Oracle vì nghiệp vụ: hạ tầng làm được.} 7/7 phép thử đấu
+nối đạt, 94/94 bảng chuyển đúng, và bộ kiểm thử tải chạy 100\% request trả về
+dữ liệu thật --- nhưng bộ đó chỉ gồm câu \texttt{COUNT(*)} một bảng.
 
-\item \textbf{Chi phí còn lại nằm ở phương ngữ SQL, không ở hạ tầng.} Phần sửa
-mã đấu nối đã xong. Phần rủi ro là chất lượng sinh SQL của mô hình, và nó đã
-được chứng minh là xử lý được bằng cách viết lại chỉ thị.
+\item \textbf{Nút thắt thật nằm ở chất lượng sinh SQL, và nó có sẵn từ trước.}
+Trên truy vấn JOIN nhiều bảng, ứng dụng chỉ trả lời đúng \textbf{1/8} câu ---
+và con số này \textbf{giống hệt nhau trên cả Oracle lẫn PostgreSQL}, nên không
+phải do đổi cơ sở dữ liệu. Chi tiết ở Mục~\ref{sec:join}. Đây là việc phải sửa
+dù ở lại hay chuyển đi.
 \end{enumerate}
 
 \subsection{Giới hạn của kết luận}

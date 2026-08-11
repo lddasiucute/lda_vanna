@@ -965,6 +965,15 @@ class TrackingRunSqlTool(RunSqlTool):
         if simple is not None and hasattr(simple, "text"):
             simple.text = f"{simple.text}\n\n{timing_note}"
 
+        # Set LOG_SQL=1 to see every statement the model produced. Off by
+        # default because a load test would drown the log in it.
+        if os.getenv("LOG_SQL", "").casefold() in {"1", "true", "yes", "on"}:
+            print(
+                f"run_sql [{'OK ' if result.success else 'LOI'}] "
+                f"{elapsed:6.3f}s: {getattr(args, 'sql', '?')}",
+                flush=True,
+            )
+
         # A failed query still streams a complete, cheerful answer, so without
         # this line a broken SQL layer looks identical to a healthy one in the
         # logs and in any load test that only checks for [DONE].

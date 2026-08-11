@@ -256,6 +256,50 @@ thêm — Oracle giành CPU và RAM với llama.cpp, mà tầng suy luận mới
 Nói gọn: **làm cho dưới 1% nhanh lên 6 lần, đổi lấy 99% còn lại chậm đi gần một
 phần ba.** Đây là khoản lỗ nhỏ hơn bản đầu của tài liệu này nêu, nhưng vẫn là lỗ.
 
+#### Điều bộ kiểm thử tải KHÔNG chứng minh được
+
+Cần nói thẳng một giới hạn mà bản trước của tài liệu này đã bỏ qua: sáu câu hỏi
+của bộ kiểm thử tải đều là `COUNT(*)` trên **một bảng**. Chúng chứng minh
+**đấu nối được**, chứ không chứng minh **sinh SQL đúng**. Kết luận "ứng dụng
+chạy được đầu-cuối" ở trên chỉ đúng trong phạm vi hẹp đó.
+
+Ngày 11/08/2026 đã dựng thêm `loadtest/thu_join_nhieu_bang.py`: 8 câu hỏi cần
+JOIN 2–3 bảng, mỗi câu có đáp án đúng do script tự tính bằng SQL viết tay rồi
+mới so với thứ ứng dụng trả về. Một câu chạy được nhưng ra số sai vẫn tính là
+hỏng. Kết quả:
+
+| Tiêu chí | Oracle | PostgreSQL |
+|---|---:|---:|
+| Có bảng trả về (tiêu chí cũ) | 7/8 | 8/8 |
+| **Trả lời đúng câu được hỏi** | **1/8** | **1/8** |
+
+**Hai cơ sở dữ liệu cho kết quả giống hệt nhau, nên đây không phải lỗi của
+Oracle.** Đây là khiếm khuyết sẵn có của ứng dụng, chỉ là chưa ai đo nên chưa
+lộ. Ba nguyên nhân, theo thứ tự mức độ:
+
+1. **Bộ khớp mẫu cướp đường câu hỏi (5/8 câu).** `_known_counts_tool_call`
+   trong `main.py` thấy chữ "có bao nhiêu" là sinh thẳng một câu đếm đóng sẵn
+   gồm nhiều bảng không liên quan, không hề gọi mô hình — nhận ra được vì các
+   câu này trả lời trong 0,0–0,1 giây. Người dùng hỏi "bao nhiêu đơn vị **không
+   có** người dùng nào" thì nhận về tổng số người dùng là 2.580.
+2. **Mô hình 3B sinh SQL sai khi phải JOIN (1/8 câu).** Câu duy nhất thoát được
+   bộ khớp mẫu và cần `GROUP BY` thì sinh ra
+   `SELECT u.full_name, u.unit_id, COUNT(*) ... GROUP BY u.unit_id`, Oracle trả
+   `ORA-00979: "U"."FULL_NAME" must appear in the GROUP BY clause`.
+3. **Chỉ 1/8 câu thật sự đúng:** một JOIN hai bảng kèm `SUM`, ra đúng
+   1.174.446.607.589.
+
+Một cái bẫy dữ liệu phát hiện thêm khi viết bộ kiểm thử: cột
+`plan_items.doanh_thu_du_kien` nghe như số tiền nhưng là `VARCHAR2` chứa văn
+bản mô tả ("Tiết kiệm 20% thời gian xử lý"). Bất kỳ ai — người hay mô hình —
+thử `SUM` lên cột đó đều nhận `ORA-01722`.
+
+**Hệ quả cho phương án chuyển đổi:** phần rủi ro đã được cảnh báo ở Mục 4.2
+không những có thật mà còn lớn hơn dự đoán, và nó **không liên quan tới việc
+đổi cơ sở dữ liệu**. Sửa nó là việc riêng, phải làm dù ở lại PostgreSQL hay
+chuyển sang Oracle: thu hẹp bộ khớp mẫu để nó không nuốt các câu hỏi phức tạp,
+và dùng mô hình mạnh hơn cho nhánh sinh SQL.
+
 #### Giới hạn của kết luận này
 
 Con số trên đo trên **một máy duy nhất** vừa chạy mô hình vừa chạy cơ sở dữ
